@@ -66,6 +66,10 @@ export type ExactReviewPublication = {
 export type ExactReviewDecision = ExactReviewBaseDecision & {
   publication?: ExactReviewPublication;
 };
+export type ExactReviewIngress = {
+  route: "direct_webhook" | "target_dispatcher";
+  fingerprint: string;
+};
 export type ExactReviewQueueItem = {
   key: string;
   decision: ExactReviewDecision;
@@ -276,6 +280,7 @@ const EXACT_REVIEW_QUEUE_STATE_KEY = "exact-review-queue";
 const EXACT_REVIEW_QUEUE_META_TABLE = "exact_review_queue_meta";
 const EXACT_REVIEW_QUEUE_ITEM_TABLE = "exact_review_queue_items";
 const EXACT_REVIEW_QUEUE_DELIVERY_TABLE = "exact_review_queue_deliveries";
+const EXACT_REVIEW_QUEUE_INGRESS_TABLE = "exact_review_queue_ingress";
 const EXACT_REVIEW_QUEUE_METRICS_TABLE = "exact_review_queue_metrics";
 const EXACT_REVIEW_QUEUE_METRIC_BUCKET_TABLE = "exact_review_queue_metric_buckets";
 const EXACT_REVIEW_QUEUE_DEAD_LETTER_TABLE = "exact_review_queue_dead_letters";
@@ -291,6 +296,7 @@ export const EXACT_REVIEW_QUEUE_NAME = "global";
 const EXACT_REVIEW_COMMAND_STATUS_MARKER_PATTERN =
   /^<!-- clawsweeper-command-status:[^<>\r\n]{1,200} -->$/;
 const EXACT_REVIEW_ADDITIONAL_PROMPT_MAX_CHARS = 5000;
+const EXACT_REVIEW_INGRESS_FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
 
 export class ExactReviewQueue {
   private storage;
@@ -319,11 +325,21 @@ export class ExactReviewQueue {
       const body = objectValue(await request.json().catch(() => null));
       const deliveryId = String(body.delivery_id || "").trim();
       const decision = exactReviewDecisionFrom(body.decision);
+      const ingress = body.ingress === undefined ? undefined : exactReviewIngressFrom(body.ingress);
       if (!deliveryId) return json({ error: "missing_delivery_id" }, 400);
       if (deliveryId.startsWith(EXACT_REVIEW_QUEUE_LEGACY_GENERATION_PREFIX)) {
         return json({ error: "reserved_delivery_id" }, 400);
       }
       if (!decision) return json({ error: "invalid_exact_review_item" }, 400);
+      if (body.ingress !== undefined && !ingress) {
+        return json({ error: "invalid_exact_review_ingress" }, 400);
+      }
+      if (
+        ingress &&
+        (decision.itemKind !== "pull_request" || decision.sourceEvent !== "pull_request")
+      ) {
+        return json({ error: "invalid_exact_review_ingress" }, 400);
+      }
       if (!isExactReviewQueueTargetEnabled(decision, this.env)) {
         return json({ ok: true, accepted: false, reason: "target not enabled" }, 202);
       }
@@ -331,6 +347,7 @@ export class ExactReviewQueue {
       const now = Date.now();
       const accepted = this.storage.transactionSync(() => {
         this.pruneDeliveryReceiptsSync(now);
+        this.pruneIngressReceiptsSync(now);
         this.storage.sql.exec(
           `DELETE FROM ${EXACT_REVIEW_QUEUE_DELIVERY_TABLE}
             WHERE delivery_id = ? AND received_at <= ?`,
@@ -349,6 +366,10 @@ export class ExactReviewQueue {
         if (insertedReceipts.length !== 1) {
           this.syncLegacyCompatibilitySync(this.readStateSync());
           return { deduped: true as const };
+        }
+        if (ingress && this.recordIngressSync(ingress, decision.targetBranch, now)) {
+          this.syncLegacyCompatibilitySync(this.readStateSync());
+          return { deduped: true as const, crossRoute: true as const };
         }
 
         const state = this.readStateSync();
@@ -423,7 +444,15 @@ export class ExactReviewQueue {
         return { deduped: false as const, key, state };
       });
       if (accepted.deduped) {
-        return json({ ok: true, deduped: true, item_key: exactReviewItemKey(decision) }, 202);
+        return json(
+          {
+            ok: true,
+            deduped: true,
+            item_key: exactReviewItemKey(decision),
+            ...(accepted.crossRoute ? { dedupe_scope: "cross_route" } : {}),
+          },
+          202,
+        );
       }
       if (accepted.shed) {
         return json({ ok: true, shed: true, reason: "backpressure" }, 202);
@@ -2165,6 +2194,15 @@ export class ExactReviewQueue {
          received_at INTEGER NOT NULL
        ) STRICT`,
     );
+    this.storage.sql.exec(
+      `CREATE TABLE IF NOT EXISTS ${EXACT_REVIEW_QUEUE_INGRESS_TABLE} (
+         fingerprint TEXT NOT NULL,
+         route TEXT NOT NULL CHECK (route IN ('direct_webhook', 'target_dispatcher')),
+         target_branch TEXT NOT NULL,
+         received_at INTEGER NOT NULL,
+         PRIMARY KEY (fingerprint, route)
+       ) STRICT`,
+    );
     // Flow telemetry is independent of queue rollback compatibility. A
     // separate singleton keeps cumulative lane counters monotonic without
     // changing the normalized queue schema or its legacy shadow contract.
@@ -2210,6 +2248,10 @@ export class ExactReviewQueue {
     this.storage.sql.exec(
       `CREATE INDEX IF NOT EXISTS exact_review_queue_deliveries_received_at
          ON ${EXACT_REVIEW_QUEUE_DELIVERY_TABLE} (received_at, delivery_id)`,
+    );
+    this.storage.sql.exec(
+      `CREATE INDEX IF NOT EXISTS exact_review_queue_ingress_received_at
+         ON ${EXACT_REVIEW_QUEUE_INGRESS_TABLE} (received_at, fingerprint)`,
     );
     this.storage.sql.exec(
       `CREATE TABLE IF NOT EXISTS ${EXACT_REVIEW_QUEUE_METRIC_BUCKET_TABLE} (
@@ -3096,6 +3138,54 @@ export class ExactReviewQueue {
     }
   }
 
+  private pruneIngressReceiptsSync(now: number) {
+    const cutoff = now - EXACT_REVIEW_QUEUE_DELIVERY_TTL_MS;
+    for (let batch = 0; batch < EXACT_REVIEW_QUEUE_DELIVERY_PRUNE_MAX_BATCHES; batch += 1) {
+      const deleted = Array.from(
+        this.storage.sql.exec(
+          `DELETE FROM ${EXACT_REVIEW_QUEUE_INGRESS_TABLE}
+          WHERE (fingerprint, route) IN (
+            SELECT fingerprint, route
+              FROM ${EXACT_REVIEW_QUEUE_INGRESS_TABLE}
+             WHERE received_at <= ?
+             ORDER BY received_at, fingerprint, route
+             LIMIT ${EXACT_REVIEW_QUEUE_DELIVERY_PRUNE_BATCH}
+          )
+        RETURNING fingerprint`,
+          cutoff,
+        ),
+      );
+      if (deleted.length < EXACT_REVIEW_QUEUE_DELIVERY_PRUNE_BATCH) break;
+    }
+  }
+
+  private recordIngressSync(ingress: ExactReviewIngress, targetBranch: string, now: number) {
+    const counterpart = ingress.route === "direct_webhook" ? "target_dispatcher" : "direct_webhook";
+    const matched =
+      Array.from(
+        this.storage.sql.exec(
+          `SELECT route FROM ${EXACT_REVIEW_QUEUE_INGRESS_TABLE}
+          WHERE fingerprint = ? AND route = ? AND target_branch = ?
+          LIMIT 1`,
+          ingress.fingerprint,
+          counterpart,
+          targetBranch,
+        ),
+      ).length > 0;
+    this.storage.sql.exec(
+      `INSERT INTO ${EXACT_REVIEW_QUEUE_INGRESS_TABLE} (fingerprint, route, target_branch, received_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(fingerprint, route) DO UPDATE SET
+         target_branch = excluded.target_branch,
+         received_at = excluded.received_at`,
+      ingress.fingerprint,
+      ingress.route,
+      targetBranch,
+      now,
+    );
+    return matched;
+  }
+
   private deliveryReceiptCountSync() {
     const row = Array.from(
       this.storage.sql.exec(
@@ -3262,6 +3352,17 @@ function exactReviewDecisionFrom(value): ExactReviewDecision | null {
     return null;
   }
   return { ...base, ...(publication ? { publication } : {}) };
+}
+
+function exactReviewIngressFrom(value): ExactReviewIngress | null {
+  const ingress = objectValue(value);
+  const route = String(ingress.route || "");
+  const fingerprint = String(ingress.fingerprint || "")
+    .trim()
+    .toLowerCase();
+  if (route !== "direct_webhook" && route !== "target_dispatcher") return null;
+  if (!EXACT_REVIEW_INGRESS_FINGERPRINT_PATTERN.test(fingerprint)) return null;
+  return { route, fingerprint };
 }
 
 function exactReviewBaseDecisionFrom(value): ExactReviewBaseDecision | null {
