@@ -113,9 +113,9 @@ Use these only when the task needs an existing non-Linux host. OpenClaw Linux
 validation uses the resolved Crabbox configuration unless the user explicitly
 requests another provider or target.
 
-Native brokered Windows is available for Windows-specific proof when the
-resolved provider supports that target. Keep provider, region, market, and image
-selection in configuration unless the user explicitly overrides them:
+Native Windows is available when the resolved provider supports that target.
+For providers other than AWS, keep placement and capacity in their resolved
+configuration:
 
 ```sh
 ../crabbox/bin/crabbox warmup \
@@ -123,6 +123,28 @@ selection in configuration unless the user explicitly overrides them:
   --windows-mode normal \
   --timing-json
 ```
+
+AWS has a provider-specific placement requirement: the OpenClaw Windows
+developer image and Docker cache are available in `us-west-2`, and native
+Windows leases must use on-demand capacity. After `crabbox config show` confirms
+`provider=aws` (or the user explicitly selects AWS), use:
+
+```sh
+CRABBOX_AWS_REGION=us-west-2 \
+CRABBOX_CAPACITY_REGIONS=us-west-2 \
+../crabbox/bin/crabbox warmup \
+  --target windows \
+  --windows-mode normal \
+  --market on-demand \
+  --timing-json
+```
+
+The region variables pin both the AWS image lookup and the capacity candidate
+set because `warmup` does not expose a generic `--region` flag. These placement
+and market settings are AWS availability constraints applied after provider
+selection; they are not a reason to select AWS for other runs. If the user
+explicitly requests AWS while `crabbox config show` resolves another provider,
+add `--provider aws` to this command to carry out that explicit override.
 
 The hydrate workflow assumes Docker should already be baked into Linux images
 and only installs it as a fallback. Do not add per-run Docker installs to proof
@@ -221,13 +243,49 @@ Crabbox should stop one-shot AWS leases automatically after the run. Verify
 cleanup when a run fails, is interrupted, or the command output is unclear:
 
 ```sh
-../crabbox/bin/crabbox list
+../crabbox/bin/crabbox list --provider aws
 ```
+
+The explicit provider keeps cleanup attached to the AWS lease recorded by the
+run, including when AWS was a user-requested override of another configured
+default.
 
 ## Blacksmith Testbox Through Crabbox
 
 This section applies only after the resolved configuration or an explicit user
 request selects Blacksmith Testbox:
+
+A fresh Testbox requires a repository-specific workflow. Crabbox resolves it
+from `blacksmith.workflow`, falling back to `actions.workflow`; job and ref use
+the equivalent Blacksmith values with Actions fallbacks. The workflow must
+contain a `useblacksmith/testbox`, `useblacksmith/begin-testbox`, or
+`useblacksmith/run-testbox` step. Confirm both the effective config and the
+actual workflow before using the provider-neutral command below; nonempty
+fields alone do not prove that an ordinary Actions workflow is Testbox-capable.
+
+For a local workflow path, validate it with:
+
+```sh
+rg -n 'useblacksmith/(testbox|begin-testbox|run-testbox)' <workflow-path>
+```
+
+For a workflow name or id, inspect its YAML through GitHub before dispatch. Do
+not guess a Testbox workflow from another repository.
+
+If the user explicitly supplies a Blacksmith override, carry those exact values
+on the command instead:
+
+```sh
+../crabbox/bin/crabbox run \
+  --provider blacksmith-testbox \
+  --blacksmith-workflow <repository-workflow> \
+  --timing-json -- <test-command>
+```
+
+Add `--blacksmith-org`, `--blacksmith-job`, and `--blacksmith-ref` only when the
+user supplies those overrides. The explicit provider and workflow flags in this
+form implement the user's repository-specific selection; they are not defaults
+for other runs.
 
 ```sh
 ../crabbox/bin/crabbox run \
@@ -615,16 +673,20 @@ it or switch providers. Report the delegated-provider outage.
 
 Crabbox Blacksmith backend delegates setup to:
 
-- org: `openclaw`
-- workflow: `.github/workflows/ci-check-testbox.yml`
-- job: `check`
-- ref: `main` unless testing a branch/tag intentionally
+- the organization reported by `crabbox config show`
+- a Testbox-capable `blacksmith.workflow` or `actions.workflow` in the target
+  repository
+- `blacksmith.job` / `blacksmith.ref`, with `actions.job` / `actions.ref`
+  fallbacks
 
 The hydration workflow owns checkout, Node/pnpm setup, dependency install,
 secrets, ready marker, and keepalive. Crabbox owns dispatch, sync, SSH command
 execution, timing, logs/results, and cleanup.
 
-Minimal Blacksmith-backed Crabbox run, from repo root:
+Minimal configured Blacksmith-backed Crabbox run, from repo root. Do not use
+this fresh-run form until the effective workflow is present and verified as
+Testbox-capable; supply the explicit user-provided workflow above or reuse an
+existing Testbox id instead.
 
 ```sh
 ../crabbox/bin/crabbox run --timing-json -- \
@@ -650,6 +712,22 @@ blacksmith auth login --non-interactive --organization openclaw
 This section applies only after the resolved configuration or an explicit user
 request selects AWS. Do not infer AWS from an omitted `--provider`.
 
+Confirm the selection first:
+
+```sh
+crabbox config show
+crabbox doctor
+```
+
+For Linux, the repository configuration supplies the broker URL, developer
+image, `eu-west-1` default region, capacity-region candidates, and
+spot-to-on-demand capacity policy. Do not repeat those values on every command;
+the resolved configuration remains the source of truth. For native Windows,
+use the `us-west-2` on-demand command in "macOS And Windows Targets" above. For
+brokered macOS, complete the quota/IAM and no-spend Dedicated Host preflight in
+that section before allocation. If the user explicitly selects AWS over a
+different resolved provider, add `--provider aws` to the AWS commands below.
+
 ```sh
 ../crabbox/bin/crabbox warmup --idle-timeout 90m
 ../crabbox/bin/crabbox actions hydrate --id <cbx_id-or-slug>
@@ -657,15 +735,21 @@ request selects AWS. Do not infer AWS from an omitted `--provider`.
 ../crabbox/bin/crabbox stop <cbx_id-or-slug>
 ```
 
-Install/auth for owned Crabbox if needed:
-
-The login commands specify AWS so credentials are scoped to the brokered AWS
-authentication path. This does not change the provider for validation commands.
+Install/auth for owned Crabbox if needed. When configuration already resolves
+AWS and only broker auth is missing, omit `--provider` so login writes the token
+without changing provider selection:
 
 ```sh
 brew install openclaw/tap/crabbox
-crabbox login --url https://crabbox.openclaw.ai --provider aws
+crabbox login --url https://crabbox.openclaw.ai
 ```
+
+If the user explicitly wants AWS as their persisted user-config default, use
+`crabbox login --url https://crabbox.openclaw.ai --provider aws`. The provider
+flag writes both broker auth and `provider=aws`; it is a configuration change,
+not merely credential scoping. Repository config or `CRABBOX_PROVIDER` may
+still take higher precedence, so confirm the effective result with
+`crabbox config show` in the target worktree.
 
 New users should self-resolve broker auth before anyone asks for AWS keys:
 
@@ -675,14 +759,16 @@ crabbox doctor
 crabbox whoami
 ```
 
-- If broker auth is missing, run `crabbox login --url https://crabbox.openclaw.ai --provider aws`.
+- If broker auth is missing, run `crabbox login --url https://crabbox.openclaw.ai`.
+  Add `--provider aws` only when the user also wants to persist AWS as their
+  user-config default.
 - If the CLI asks for `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or AWS
   profile setup during normal OpenClaw validation, assume the agent selected
   the wrong path. Use brokered `crabbox login` or an existing brokered lease
   before asking the user for cloud credentials.
 - Ask for AWS keys only for explicit direct-provider/account administration,
   not for normal brokered OpenClaw proof.
-- Trusted automation may still use
+- Trusted automation that intentionally persists AWS as its default may use
   `printf '%s' "$CRABBOX_COORDINATOR_TOKEN" | crabbox login --url https://crabbox.openclaw.ai --provider aws --token-stdin`.
 
 macOS config lives at:
