@@ -4755,6 +4755,7 @@ jobs:
         run: echo "succeeded=true" >> "$GITHUB_OUTPUT"
 
       - name: Finalize apply action ledger
+        id: finalize-apply-action-ledger
         if: ${{ always() }}
         env:
           APPLY_OUTCOME: ${{ steps.apply-existing-run.outcome || 'not_started' }}
@@ -4768,6 +4769,7 @@ jobs:
           pnpm run --silent finalize-action-events -- "${args[@]}"
 
       - name: Retry final apply status publication
+        id: retry-final-apply-status-publication
         if: ${{ always() && !cancelled() && steps.primary-apply-result.outputs.succeeded == 'true' }}
         run: |
           if [ "${APPLY_NOOP:-false}" = "true" ]; then
@@ -4782,6 +4784,7 @@ jobs:
             --rebase-strategy apply-records
 
       - name: Publish apply action events
+        id: publish-apply-action-events
         if: ${{ always() }}
         run: |
           set -euo pipefail
@@ -4903,6 +4906,23 @@ jobs:
             -f apply_comment_sync_min_age_days="$APPLY_COMMENT_SYNC_MIN_AGE_DAYS" \
             -f apply_close_delay_ms="$APPLY_CLOSE_DELAY_MS" \
             -f apply_checkpoint_size="$APPLY_CHECKPOINT_SIZE"
+
+      - name: Publish apply telemetry
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          QUEUE_URL: ${{ vars.CLAWSWEEPER_EXACT_REVIEW_QUEUE_URL || 'https://clawsweeper.openclaw.ai' }}
+          CLAWSWEEPER_WEBHOOK_SECRET: ${{ secrets.CLAWSWEEPER_WEBHOOK_SECRET }}
+          APPLY_OUTCOME: ${{ steps.apply-existing-run.outcome || ((needs.apply-proof.result == 'failure' || needs.publish-apply-proof-action-ledger.result == 'failure') && 'failure') || 'skipped' }}
+          ACTION_LEDGER_OUTCOME: ${{ steps.finalize-apply-action-ledger.outcome || 'not_started' }}
+          STATE_STATUS_OUTCOME: ${{ steps.retry-final-apply-status-publication.outcome || 'not_started' }}
+          STATE_PUBLICATION_OUTCOME: ${{ steps.publish-apply-action-events.outcome || 'not_started' }}
+          TARGET_REPO: ${{ steps.target.outputs.target_repo || needs.apply-proof.outputs.target_repo }}
+        run: |
+          set -euo pipefail
+          test -n "$CLAWSWEEPER_WEBHOOK_SECRET"
+          node scripts/publish-apply-observability.mjs \
+            --health-file ".artifacts/apply-health-final.json"
 
       - name: Queue review backstops
         if: ${{ always() && !cancelled() && steps.primary-apply-result.outputs.succeeded == 'true' && steps.target.outputs.target_repo == 'openclaw/openclaw' }}
