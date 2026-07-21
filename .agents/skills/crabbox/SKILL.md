@@ -7,23 +7,20 @@ description: Use the Crabbox wrapper for validation across Linux, macOS, Windows
 
 ## Provider Selection Contract
 
-Resolve the provider before deciding whether validation is local or remote. Run
+Provider selection is configuration resolution, not testing policy. Run
 `crabbox config show` from the exact worktree being tested; a session may have
 started in another checkout whose repository config or skill text is stale. A
 request to "use Crabbox" does not authorize a provider override. When the user
 does not name a backend, omit `--provider` and preserve the resolved provider,
-including `local-container` from user config or `CRABBOX_PROVIDER`.
+including values supplied by user config or `CRABBOX_PROVIDER`.
 
-`local-container` is an isolated Crabbox backend, not a broad test running
-directly on the laptop. Broad gates may run there when it is the resolved
-provider. Override it only when the user or an indispensable proof requirement
-explicitly names a different backend; explain that requirement before starting
-the override.
+Test scope, expected duration, and hydration failures do not select a provider.
+Override the resolved provider only when the user explicitly names a different
+backend. If that provider cannot perform the requested test, report the blocker
+instead of silently selecting another backend.
 
-Use the Crabbox wrapper when OpenClaw needs isolated Linux proof for broad
-tests, CI-parity checks, secrets, hosted services, Docker/E2E/package lanes,
-warmed reusable boxes, sync timing, logs/results, cache inspection, or lease
-cleanup.
+Use the Crabbox wrapper for validation execution, environment lifecycle, sync,
+logs/results, cache inspection, and lease cleanup.
 
 Crabbox is the transport/orchestration surface. The actual backend can be:
 
@@ -33,22 +30,23 @@ Crabbox is the transport/orchestration surface. The actual backend can be:
 - Blacksmith Testbox through Crabbox: delegated provider,
   `provider=blacksmith-testbox`, ids like `tbx_...`, `syncDelegated=true`
 
-For OpenClaw maintainer broad `pnpm` gates, Blacksmith Testbox through the
-Crabbox wrapper is acceptable when the resolved provider or requested proof
-lane selects it. Do not describe those runs as "AWS Crabbox"; report them as
+The provider-specific sections below document capabilities and commands after
+configuration or an explicit user request has selected a backend. They are not
+provider-selection policy.
+
+When the resolved configuration selects Blacksmith Testbox, or the user
+explicitly requests it, do not describe the run as "AWS Crabbox". Report it as
 Testbox-through-Crabbox with the `tbx_...` id and Actions run.
 
-Use the repo `.crabbox.yaml` brokered AWS path when the task specifically needs
-direct AWS Crabbox behavior, persistent direct-provider leases, `--fresh-pr`,
-`--full-resync`, environment forwarding, capture/download support, or provider
-comparison. Use `--provider blacksmith-testbox` when the task needs OpenClaw
-maintainer Testbox proof, prepared CI environment, broad/heavy pnpm gates, or
-the user asks for Testbox/Blacksmith.
+Direct AWS supports persistent leases, `--fresh-pr`, `--full-resync`,
+environment forwarding, capture/download, and provider-comparison workflows.
+Blacksmith Testbox provides a prepared CI environment and delegated broad/heavy
+`pnpm` gates. These capabilities do not override the resolved configuration.
 
 ## First Checks
 
 - Run from the repo root. Crabbox sync mirrors the current checkout.
-- Check the wrapper and providers before remote work:
+- Check the wrapper and providers before Crabbox work:
 
 ```sh
 command -v crabbox
@@ -64,13 +62,12 @@ command -v crabbox
   before selecting a provider. The resolved provider can come from the user's
   Crabbox config or environment as well as the repository file.
 - Omitting `--provider` means "use the resolved configuration". Pass it only
-  when the task specifically requires a different backend, and report the
+  when the user explicitly requests a different backend, and report the
   provider from Crabbox output rather than inferring it from bootstrap wording.
-- Treat `CRABBOX_PROVIDER` as part of that resolved provider configuration. If
-  `crabbox config show` reports `provider=local-container`, keep that provider;
-  a hydration or test failure is not permission to retry on AWS or Testbox.
-  Override the resolved provider only when the user or the required proof lane
-  explicitly names another backend.
+- Treat `CRABBOX_PROVIDER` as part of that resolved provider configuration. The
+  provider reported by `crabbox config show` is authoritative; a hydration or
+  test failure is not permission to switch backends. Override it only when the
+  user explicitly names another provider.
 - Some package-manager wrappers insert a command delimiter before Crabbox
   options. If the printed command looks like `crabbox run -- --provider ...`
   or `crabbox run -- --no-hydrate ...`, call the trusted Crabbox binary
@@ -79,9 +76,8 @@ command -v crabbox
   config pins hot `eu-west-1a/b/c` placement so Fast Snapshot Restore can apply.
   If warmup drifts well past the minute-scale path, verify image promotion,
   region/AZ placement, and FSR state before blaming OpenClaw.
-- For broad OpenClaw maintainer `pnpm` gates, use the resolved provider. Select
-  `--provider blacksmith-testbox` or the repo Testbox helpers only when the user
-  or an indispensable proof requirement specifically calls for Testbox.
+- Targeted and broad `pnpm` gates both use the resolved provider. Test size does
+  not authorize `--provider blacksmith-testbox` or another override.
 - Always report the provider field and id. Both local-container and direct
   providers can use `cbx_...`, so the id prefix alone does not prove AWS;
   `tbx_...` identifies Blacksmith Testbox through Crabbox. If the output only
@@ -97,29 +93,28 @@ command -v crabbox
   not leave it in remote shell history or logs. If no secret-safe injection path
   is available, say true live provider auth is blocked instead of silently using
   a fake key.
-- Prefer local targeted tests for tight edit loops. Keep broad gates inside the
-  resolved Crabbox backend; `local-container` satisfies this isolation boundary.
+- Targeted versus broad describes test scope only; it does not imply local,
+  remote, host, or container execution.
 - Do not treat unrelated inherited shell controls as operator intent. In
   particular, `OPENCLAW_LOCAL_CHECK_MODE=throttled` from the local shell is not
   permission to move broad `pnpm check:changed`, `pnpm test:changed`, full
   `pnpm test`, or lint/typecheck fan-out onto the laptop. This does not negate
   provider-selection variables such as `CRABBOX_PROVIDER`, which are resolved
   and reported by `crabbox config show`.
-- Only use `OPENCLAW_LOCAL_CHECK_MODE=throttled|full` when the user explicitly
-  asks for local proof in the current task. If Testbox is queued or capacity is
-  constrained, report the blocker and keep only targeted local edit-loop checks
-  running.
+- `OPENCLAW_LOCAL_CHECK_MODE=throttled|full` controls direct host execution; it
+  is separate from Crabbox provider selection and must not override the provider
+  reported by `crabbox config show`.
 
 ## macOS And Windows Targets
 
-Use these only when the task needs an existing non-Linux host. OpenClaw broad
-Linux validation uses the repo Crabbox config unless a provider is explicitly
-requested.
+Use these only when the task needs an existing non-Linux host. OpenClaw Linux
+validation uses the resolved Crabbox configuration unless the user explicitly
+requests another provider or target.
 
-Native brokered Windows is available for Windows-specific proof. Use the AWS
-developer image in `us-west-2` on demand; it has the expected OpenClaw developer
-toolchain and Docker image cache. Keep broad Linux gates on Linux/Testbox unless
-the bug is Windows-specific:
+Native brokered Windows is available for Windows-specific proof. The AWS
+developer image in `us-west-2` has the expected OpenClaw developer toolchain and
+Docker image cache. Select these Windows-specific flags only when the resolved
+configuration or an explicit user request selects that backend and target:
 
 ```sh
 ../crabbox/bin/crabbox warmup \
@@ -172,8 +167,8 @@ Crabbox supports static SSH targets:
 
 ## Direct Brokered AWS Backend
 
-Use this when the task needs direct AWS Crabbox semantics rather than the
-prepared Blacksmith Testbox CI environment.
+This section applies only after the resolved configuration or an explicit user
+request selects direct AWS Crabbox.
 
 Changed gate:
 
@@ -226,8 +221,8 @@ cleanup when a run fails, is interrupted, or the command output is unclear:
 
 ## Blacksmith Testbox Through Crabbox
 
-Use this for OpenClaw maintainer broad/heavy `pnpm` gates when the prepared CI
-environment is the right proof surface:
+This section applies only after the resolved configuration or an explicit user
+request selects Blacksmith Testbox:
 
 ```sh
 node scripts/crabbox-wrapper.mjs run \
@@ -567,8 +562,8 @@ Common Crabbox-only failures:
   This is a hydration transport workaround, not permission to run the broad
   check on the host or silently select a remote provider.
 - Bad local config: inspect `.crabbox.yaml`, `crabbox config show`, and
-  `crabbox whoami`; preserve the resolved provider unless the requested proof
-  specifically requires another backend.
+  `crabbox whoami`; preserve the resolved provider unless the user explicitly
+  requests another backend.
 - Slug/claim confusion: use the raw `cbx_...` / `tbx_...` id, or run one-shot
   without `--id`.
 - Sync/timing bug: add `--debug --timing-json`; capture the final JSON and the
@@ -580,10 +575,8 @@ Common Crabbox-only failures:
 - Cleanup uncertainty: run `crabbox list --provider aws`; for explicit
   Blacksmith runs, use `blacksmith testbox list` and stop only boxes you
   created.
-- Testbox queued/capacity pressure: do not retry Blacksmith repeatedly. Rerun
-  once without `--provider` to use the resolved configuration, or report the
-  Blacksmith blocker if Testbox itself is the requested proof. Do not assume
-  the resolved fallback is AWS.
+- Testbox queued/capacity pressure: do not retry repeatedly or switch providers.
+  Report the blocker and preserve the resolved provider.
 
 If brokered AWS cannot dispatch, sync, attach, or stop, retry once with
 `--debug` and `--timing-json`:
@@ -615,10 +608,8 @@ Raw Blacksmith footguns:
 - Treat `blacksmith testbox list` as cleanup diagnostics, not a shared reusable
   queue.
 
-Use Blacksmith only when the task is specifically about Testbox, brokered AWS
-is unavailable, or an explicit comparison is needed. If Blacksmith is down or
-quota-limited, do not keep probing it; stay on brokered AWS and note the
-delegated-provider outage.
+If the selected Blacksmith backend is down or quota-limited, do not keep probing
+it or switch providers. Report the delegated-provider outage.
 
 ## Blacksmith Backend Notes
 
@@ -656,9 +647,8 @@ blacksmith auth login --non-interactive --organization openclaw
 
 ## Brokered AWS
 
-Use AWS when the task specifically requires remote direct-provider proof. If
-`crabbox config show` resolves another provider, select AWS explicitly for this
-lane instead of claiming that an omitted provider implies AWS.
+This section applies only after the resolved configuration or an explicit user
+request selects AWS. Do not infer AWS from an omitted `--provider`.
 
 ```sh
 pnpm crabbox:warmup -- --provider aws --class beast --market on-demand --idle-timeout 90m
@@ -699,8 +689,8 @@ macOS config lives at:
 ```
 
 It should include `broker.url` and `broker.token` for AWS lanes. Let the resolved
-config drive normal validation and override it only for a provider-specific
-proof lane.
+config select the backend; override it only when the user explicitly requests a
+different provider.
 
 ### Interactive Desktop / WebVNC
 
@@ -748,8 +738,8 @@ Use `--market spot|on-demand` only on AWS warmup/one-shot runs.
 - Cleanup uncertain: `crabbox list --provider aws`; for explicit Blacksmith
   runs, use `blacksmith testbox list` and stop owned `tbx_...` leases you
   created.
-- Crabbox broken but Blacksmith works: use the direct Blacksmith fallback above,
-  then file/fix the Crabbox issue.
+- Selected provider broken: report the provider-specific blocker; do not switch
+  providers unless the user explicitly requests the fallback.
 
 ## Boundary
 
