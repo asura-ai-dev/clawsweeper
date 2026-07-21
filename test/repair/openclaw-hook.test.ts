@@ -75,6 +75,18 @@ test("resolveOpenClawHookConfig supports explicit retry attempts", () => {
   );
 });
 
+test("resolveOpenClawHookConfig skips non-OpenClaw targets", () => {
+  assert.equal(
+    resolveOpenClawHookConfig({
+      CLAWSWEEPER_TARGET_REPO: "asura-ai-dev/garuda",
+      CLAWSWEEPER_OPENCLAW_HOOK_URL: "https://claw.example/hooks",
+      CLAWSWEEPER_OPENCLAW_HOOK_TOKEN: "secret",
+      CLAWSWEEPER_DISCORD_TARGET: "channel:123",
+    }),
+    null,
+  );
+});
+
 test("isTransientOpenClawHookError classifies retryable HTTP statuses and socket failures", () => {
   assert.equal(isTransientOpenClawHookError(new OpenClawHookHttpError(502, "bad")), true);
   assert.equal(isTransientOpenClawHookError(new OpenClawHookHttpError(401, "bad")), false);

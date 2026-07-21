@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 env:
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
-  STATE_REPOSITORY: openclaw/clawsweeper-state
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
+  STATE_REPOSITORY: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY || 'openclaw/clawsweeper-state' }}
   STATE_REPO_SIZE_WARN_GB: ${{ vars.STATE_REPO_SIZE_WARN_GB || '5' }}
 
 concurrency:
@@ -50,7 +50,7 @@ jobs:
         if: ${{ steps.preflight.outputs.compact == 'true' }}
         uses: actions/checkout@v7
         with:
-          repository: openclaw/clawsweeper-state
+          repository: ${{ env.STATE_REPOSITORY }}
           ref: main
           path: clawsweeper-state
           token: ${{ steps.state-token.outputs.token }}

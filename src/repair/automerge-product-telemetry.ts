@@ -1,4 +1,5 @@
 import type { LooseRecord } from "./json-types.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 
 export const AUTOMERGE_POLICY_VERSION = "immediate-v1";
 const DEFAULT_AUTOMERGE_METRIC_TIMEOUT_MS = 5_000;
@@ -102,7 +103,7 @@ export async function postAutomergeMetricBestEffort(
   env: NodeJS.ProcessEnv = process.env,
   fetcher: typeof fetch = fetch,
 ) {
-  if (!event) return false;
+  if (!event || !isOpenClawOrgTarget(event.repository)) return false;
   const token = String(env.CLAWSWEEPER_STATUS_INGEST_TOKEN ?? "").trim();
   if (!token) return false;
   const baseUrl = String(

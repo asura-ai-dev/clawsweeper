@@ -6,6 +6,7 @@ import type { JsonObject, JsonValue } from "./json-types.js";
 import { asJsonObject } from "./json-types.js";
 import { parseArgs, repoRoot } from "./lib.js";
 import { readJsonFile } from "./json-file.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 import {
   errorText,
   postOpenClawAgentHook,
@@ -150,7 +151,7 @@ export function buildApplyEvent(row: JsonObject): ClawSweeperEvent | null {
   const action = stringOrNull(row.action);
   const status = stringOrNull(row.status);
   const repo = stringOrNull(row.repo);
-  if (!action || !status || !repo) return null;
+  if (!action || !status || !repo || !isOpenClawOrgTarget(repo)) return null;
 
   const reason = stringOrNull(row.reason);
   const target = normalizeTarget(row.target);
@@ -227,7 +228,8 @@ export function buildFixEvent(row: JsonObject, record: JsonObject): ClawSweeperE
   const action = stringOrNull(row.action);
   const status = stringOrNull(row.status);
   const repo = stringOrNull(record.repo);
-  if (!action || !status || !repo || !FIX_OPEN_ACTIONS.has(action)) return null;
+  if (!action || !status || !repo || !isOpenClawOrgTarget(repo) || !FIX_OPEN_ACTIONS.has(action))
+    return null;
 
   const important = ["opened", "pushed", "planned", "blocked", "failed"].includes(status);
   if (!important) return null;

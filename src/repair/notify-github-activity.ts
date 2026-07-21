@@ -6,6 +6,7 @@ import { DEFAULT_TRUSTED_BOTS } from "./config.js";
 import type { JsonObject, JsonValue } from "./json-types.js";
 import { asJsonObject } from "./json-types.js";
 import { parseArgs, repoRoot } from "./lib.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 import {
   boolEnv,
   errorText,
@@ -304,6 +305,16 @@ export async function runGithubActivityNotifier(
   });
   if (!activity) {
     const summary = summaryRow("skipped", 0, 0, `unsupported GitHub event: ${eventName}`);
+    log(JSON.stringify(summary));
+    return summary;
+  }
+  if (!isOpenClawOrgTarget(activity.repo)) {
+    const summary = summaryRow(
+      "skipped",
+      0,
+      0,
+      `OpenClaw hook notification skipped for non-OpenClaw target ${activity.repo}`,
+    );
     log(JSON.stringify(summary));
     return summary;
   }

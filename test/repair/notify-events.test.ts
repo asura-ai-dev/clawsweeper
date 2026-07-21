@@ -96,6 +96,22 @@ test("buildFixEvent maps opened fix PRs and repair failures", () => {
   assert.equal(failed?.severity, "error");
 });
 
+test("event notifier excludes non-OpenClaw repositories", () => {
+  assert.equal(
+    buildApplyEvent({
+      repo: "asura-ai-dev/garuda",
+      target: "#123",
+      action: "merge_canonical",
+      status: "executed",
+    }),
+    null,
+  );
+  assert.equal(
+    buildFixEvent({ action: "open_fix_pr", status: "opened" }, { repo: "asura-ai-dev/garuda" }),
+    null,
+  );
+});
+
 test("collectClawSweeperEvents filters by run and ledger idempotency", () => {
   const applyRows = [
     {

@@ -76,7 +76,7 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
   CLAWSWEEPER_UNSPONSORED_FEATURE_CLOSE_ENABLED: ${{ vars.CLAWSWEEPER_UNSPONSORED_FEATURE_CLOSE_ENABLED || 'false' }}
   CLAWSWEEPER_AUTHOR_PR_BUDGET_CLOSE_ENABLED: ${{ vars.CLAWSWEEPER_AUTHOR_PR_BUDGET_CLOSE_ENABLED || 'false' }}
 
@@ -146,8 +146,8 @@ jobs:
         with:
           client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
           private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
-          owner: openclaw
-          repositories: clawsweeper
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
           permission-actions: write
           permission-contents: write
 
@@ -193,7 +193,7 @@ jobs:
           force_reprocess="${{ github.event_name == 'workflow_dispatch' && inputs.force_reprocess || 'false' }}"
           attempt_id="${{ github.event_name == 'workflow_dispatch' && inputs.attempt_id || '' }}"
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            target_repo="${{ github.event.client_payload.target_repo || 'openclaw/openclaw' }}"
+            target_repo="${{ github.event.client_payload.target_repo || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}"
             target_branch="${{ github.event.client_payload.target_branch || '' }}"
             lookback_minutes="${{ github.event.client_payload.lookback_minutes || vars.CLAWSWEEPER_COMMENT_LOOKBACK_MINUTES || '180' }}"
             since=""
@@ -331,7 +331,7 @@ jobs:
           force_reprocess="${{ github.event_name == 'workflow_dispatch' && inputs.force_reprocess || 'false' }}"
           attempt_id="${{ github.event_name == 'workflow_dispatch' && inputs.attempt_id || '' }}"
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            target_repo="${{ github.event.client_payload.target_repo || 'openclaw/openclaw' }}"
+            target_repo="${{ github.event.client_payload.target_repo || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}"
             target_branch="${{ github.event.client_payload.target_branch || '' }}"
             lookback_minutes="${{ github.event.client_payload.lookback_minutes || vars.CLAWSWEEPER_COMMENT_LOOKBACK_MINUTES || '180' }}"
             since=""

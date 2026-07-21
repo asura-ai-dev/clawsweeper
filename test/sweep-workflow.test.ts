@@ -923,7 +923,12 @@ test("terminal exact-review runs reconcile through a signed isolated backstop", 
     sweepJob,
     /REVIEW_PLACEHOLDER_MIN_AGE_HOURS: \$\{\{ vars\.REVIEW_PLACEHOLDER_MIN_AGE_HOURS \|\| '2' \}\}/,
   );
-  assert.match(sweepJob, /TARGET_REPO: openclaw\/openclaw/);
+  assert.match(
+    workflow,
+    /CLAWSWEEPER_TARGET_REPO: \$\{\{ vars\.CLAWSWEEPER_TARGET_REPO \|\| 'openclaw\/openclaw' \}\}/,
+  );
+  assert.match(sweepJob, /TARGET_REPO: \$\{\{ env\.CLAWSWEEPER_TARGET_REPO \}\}/);
+  assert.match(sweepJob, /TARGET_BRANCH: \$\{\{ env\.CLAWSWEEPER_TARGET_BRANCH \}\}/);
 });
 
 test("publish workflow dispatches immediate apply through the isolated lane", () => {
@@ -1537,7 +1542,7 @@ test("apply workflow bounds checkpoints and requeues with a fresh token", () => 
   assert.doesNotMatch(continueStep, /gh run list/);
   assert.match(continueStep, /pnpm run --silent workflow -- apply-continuation-blocker/);
   assert.match(continueStep, /--current-run-id "\$\{\{ github\.run_id \}\}"/);
-  assert.match(continueStep, /--target-repo "\$\{APPLY_TARGET_REPO:-openclaw\/openclaw\}"/);
+  assert.match(continueStep, /--target-repo "\$\{APPLY_TARGET_REPO:-\$CLAWSWEEPER_TARGET_REPO\}"/);
   assert.match(continueStep, /APPLY_CONTINUATION_BLOCKED/);
   assert.match(continueStep, /existing default cursor run will continue the lane/);
   assert.match(continueStep, /already covered by \$/);
@@ -2460,7 +2465,7 @@ test("sweep event reviews and target fanout avoid storm amplification", () => {
 
 test("setup-state defaults to an auth-safe shallow checkout", () => {
   const action = readText(".github/actions/setup-state/action.yml");
-  assert.doesNotMatch(action, /CLAWSWEEPER_STATE_REPOSITORY=/);
+  assert.match(action, /CLAWSWEEPER_STATE_REPOSITORY=\$STATE_REPOSITORY/);
   assert.doesNotMatch(action, /CLAWSWEEPER_STATE_TOKEN/);
   const filterBlock = action.slice(action.indexOf("filter:"), action.indexOf("fetch-depth:"));
   const fetchDepthBlock = action.slice(action.indexOf("fetch-depth:"), action.indexOf("runs:"));
@@ -2474,7 +2479,10 @@ test("setup-state defaults to an auth-safe shallow checkout", () => {
   assert.match(action, /sparse-checkout: \$\{\{ inputs\.sparse-checkout \}\}/);
   assert.doesNotMatch(action, /state-repository:/);
   assert.doesNotMatch(action, /state-ref:/);
-  assert.match(action, /repository: openclaw\/clawsweeper-state/);
+  assert.match(
+    action,
+    /repository: \$\{\{ vars\.CLAWSWEEPER_STATE_REPOSITORY \|\| inputs\.repository \}\}/,
+  );
   assert.match(action, /ref: state/);
 });
 

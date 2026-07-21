@@ -2640,8 +2640,9 @@ test("sweep failed-review retry lane defaults to dry-run exact-item dispatch", (
   assert.match(retryBlock, /--target-repo "\$TARGET_REPO"/);
   assert.match(retryBlock, /RETRY_MAX_RUNTIME_MS:.*'600000'/);
   assert.match(retryBlock, /--max-runtime-ms "\$RETRY_MAX_RUNTIME_MS"/);
-  assert.match(retryBlock, /--state-dir results\/failed-review-retries\/openclaw-openclaw/);
-  assert.match(retryBlock, /--path results\/failed-review-retries\/openclaw-openclaw/);
+  assert.match(retryBlock, /target_slug="\$\{TARGET_REPO\/\/\\\/\/-\}"/);
+  assert.match(retryBlock, /--state-dir "results\/failed-review-retries\/\$target_slug"/);
+  assert.match(retryBlock, /--path "\$state_dir"/);
   assert.doesNotMatch(retryBlock, /--path records\/openclaw-openclaw/);
   const publishIndex = retryBlock.indexOf("- name: Publish failed-review retry state");
   const uploadIndex = retryBlock.indexOf("- uses: actions/upload-artifact@v7");
@@ -2649,8 +2650,9 @@ test("sweep failed-review retry lane defaults to dry-run exact-item dispatch", (
   assert.ok(uploadIndex > publishIndex);
   assert.match(
     retryBlock.slice(publishIndex, uploadIndex),
-    /if: \$\{\{ always\(\) && vars\.CLAWSWEEPER_FAILED_REVIEW_RETRY_ENABLED == '1' && hashFiles\('results\/failed-review-retries\/openclaw-openclaw\/\*\.json'\) != '' \}\}/,
+    /if: \$\{\{ always\(\) && vars\.CLAWSWEEPER_FAILED_REVIEW_RETRY_ENABLED == '1' \}\}/,
   );
+  assert.match(retryBlock, /compgen -G "\$state_dir\/\*\.json"/);
   assert.match(
     retryBlock.slice(uploadIndex, retryBlock.indexOf("\n\n", uploadIndex)),
     /if: \$\{\{ always\(\) \}\}/,

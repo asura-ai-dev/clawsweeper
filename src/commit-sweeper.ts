@@ -885,7 +885,11 @@ function dispatchFindingsCommand(args: Args): void {
   }
 
   const artifactDir = resolve(argString(args, "artifact_dir", "commit-artifacts"));
-  const repairRepo = argString(args, "repair_repo", "openclaw/clawsweeper");
+  const repairRepo = argString(
+    args,
+    "repair_repo",
+    process.env.GITHUB_REPOSITORY ?? "openclaw/clawsweeper",
+  );
   const dispatchMode = argString(args, "dispatch_mode", "workflow_dispatch");
   const repairWorkflow = argString(args, "repair_workflow", "repair-commit-finding-intake.yml");
   const reportRepo = argString(

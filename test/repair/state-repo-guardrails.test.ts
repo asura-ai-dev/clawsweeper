@@ -5,11 +5,24 @@ import {
   parseStateBranchIdentity,
   runStateBranchJanitor,
 } from "../../dist/repair/state-branch-janitor.js";
-import { runStateRepoSizeCheck } from "../../dist/repair/state-repo-size.js";
+import {
+  resolveStateRepository,
+  runStateRepoSizeCheck,
+} from "../../dist/repair/state-repo-size.js";
 
 const now = new Date("2026-07-21T12:00:00.000Z");
 const stateToken = "test-token-state";
 const sourceToken = "test-token-source";
+
+test("repository variable overrides the legacy state repository environment", () => {
+  assert.equal(
+    resolveStateRepository({
+      CLAWSWEEPER_STATE_REPOSITORY: "asura-ai-dev/clawsweeper-state",
+      STATE_REPOSITORY: "openclaw/clawsweeper-state",
+    }),
+    "asura-ai-dev/clawsweeper-state",
+  );
+});
 
 function branch(runId: string, attempt = 1, suffix = "abcdef123456") {
   return {

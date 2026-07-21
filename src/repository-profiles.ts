@@ -139,6 +139,10 @@ export function normalizeRepo(targetRepo: string): string {
   return targetRepo.trim().toLowerCase();
 }
 
+export function isOpenClawOrgTarget(targetRepo: string): boolean {
+  return normalizeRepo(targetRepo).startsWith("openclaw/");
+}
+
 export function isAutoCloseAllowed(
   profile: RepositoryProfile,
   kind: RepositoryItemKind,

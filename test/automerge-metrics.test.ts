@@ -11,7 +11,7 @@ import {
   automergeSessionId,
   latestAutomergeActivationForCommand,
   postAutomergeMetricBestEffort,
-} from "../src/repair/automerge-product-telemetry.ts";
+} from "../dist/repair/automerge-product-telemetry.js";
 import {
   automergeReconcileExitCode,
   reconcileAutomergeProductMetrics,
@@ -237,6 +237,35 @@ test("reactivation creates a new stable session and ingest failure is non-fatal"
     },
   );
   assert.equal(delivered, false);
+});
+
+test("Garuda automerge telemetry does not call the OpenClaw dashboard", async () => {
+  let requests = 0;
+  const delivered = await postAutomergeMetricBestEffort(
+    {
+      event_type: "clawsweeper.automerge_metric",
+      event_id: "garuda-event",
+      session_id: "garuda-session",
+      phase: "activated",
+      occurred_at: now,
+      repository: "asura-ai-dev/garuda",
+      item_number: 42,
+      policy_version: "immediate-v1",
+      state: "active",
+      outcome: null,
+      reason: null,
+      pr_url: "https://github.com/asura-ai-dev/garuda/pull/42",
+      run_url: null,
+    },
+    { CLAWSWEEPER_STATUS_INGEST_TOKEN: "token" },
+    async () => {
+      requests += 1;
+      return new Response(null, { status: 204 });
+    },
+  );
+
+  assert.equal(delivered, false);
+  assert.equal(requests, 0);
 });
 
 test("batched stop commands bind to the preceding activation, not a future reactivation", () => {

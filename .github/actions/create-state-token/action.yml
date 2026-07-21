@@ -22,13 +22,30 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Resolve state repository
+      id: state-repository
+      shell: bash
+      env:
+        CONFIGURED_STATE_REPOSITORY: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY }}
+        DEFAULT_STATE_OWNER: ${{ inputs.owner }}
+        DEFAULT_STATE_REPOSITORY: ${{ inputs.repository }}
+      run: |
+        set -euo pipefail
+        state_repository="${CONFIGURED_STATE_REPOSITORY:-${DEFAULT_STATE_OWNER}/${DEFAULT_STATE_REPOSITORY}}"
+        if ! [[ "$state_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+          echo "CLAWSWEEPER_STATE_REPOSITORY must be owner/repository" >&2
+          exit 1
+        fi
+        echo "owner=${state_repository%%/*}" >> "$GITHUB_OUTPUT"
+        echo "repository=${state_repository#*/}" >> "$GITHUB_OUTPUT"
+
     - name: Create state repository token
       id: state-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
         client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.private-key }}
-        owner: ${{ inputs.owner }}
-        repositories: ${{ inputs.repository }}
+        owner: ${{ steps.state-repository.outputs.owner }}
+        repositories: ${{ steps.state-repository.outputs.repository }}
         permission-actions: write
         permission-contents: write

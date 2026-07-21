@@ -79,7 +79,11 @@ export async function runSpamCommentIntake(
   const reportPath = path.resolve(root, stringArg(args.report) ?? DEFAULT_REPORT_PATH);
   const writeReport = Boolean(args["write-report"]);
   const dryRun = Boolean(args["dry-run"] || boolEnv(env.CLAWSWEEPER_SPAM_INTAKE_DRY_RUN, false));
-  const dispatchRepo = stringArg(args["dispatch-repo"]) ?? DEFAULT_DISPATCH_REPO;
+  const dispatchRepo =
+    stringArg(args["dispatch-repo"]) ??
+    stringArg(env.CLAWSWEEPER_REVIEW_REPO) ??
+    stringArg(env.GITHUB_REPOSITORY) ??
+    DEFAULT_DISPATCH_REPO;
   const token = stringArg(env.GH_TOKEN) ?? stringArg(env.GITHUB_TOKEN);
 
   if (!eventPath || !eventName || !fs.existsSync(eventPath)) {

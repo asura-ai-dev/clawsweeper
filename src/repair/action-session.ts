@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { JsonValue, LooseRecord } from "./json-types.js";
 import { parseArgs, parseJob } from "./lib.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 
 export type ActionWorkKind = "issue_to_pr" | "pr_repair" | "repair_cluster";
 
@@ -77,11 +78,17 @@ async function main(): Promise<void> {
 
 async function registerActionSession(jobPath: string): Promise<void> {
   if (!jobPath) throw new Error("action-session register requires a job path");
+  const job = parseJob(jobPath);
+  const repo = String(job.frontmatter.repo ?? "");
+  if (repo && !isOpenClawOrgTarget(repo)) {
+    writeGitHubEnv({ CLAWSWEEPER_CRABFLEET_DISABLED: "1" });
+    console.log(`CrabFleet action session skipped for non-OpenClaw target ${repo || "(unknown)"}`);
+    return;
+  }
   const serviceToken = requiredEnv("CLAWSWEEPER_CRABFLEET_SERVICE_TOKEN");
   const baseUrl = String(
     process.env.CLAWSWEEPER_CRABFLEET_URL ?? "https://crabfleet.openclaw.ai",
   ).replace(/\/+$/, "");
-  const job = parseJob(jobPath);
   const sourceUrl = actionSourceUrl(job);
   const response = await fetch(`${baseUrl}/api/openclaw/action-sessions`, {
     method: "POST",
@@ -93,7 +100,7 @@ async function registerActionSession(jobPath: string): Promise<void> {
       workKey: actionWorkKey(job.frontmatter),
       workKind: actionWorkKind(job.frontmatter),
       owner: actionSessionOwner(),
-      repo: String(job.frontmatter.repo ?? ""),
+      repo,
       branch: String(job.frontmatter.target_branch ?? process.env.GITHUB_REF_NAME ?? ""),
       sourceUrl,
       runUrl: actionRunUrl(),
@@ -167,6 +174,10 @@ async function updateActionSession({
   summary: string;
   completionReason: string;
 }): Promise<void> {
+  if (process.env.CLAWSWEEPER_CRABFLEET_DISABLED === "1") {
+    console.log("CrabFleet work-state update skipped for non-OpenClaw target");
+    return;
+  }
   const url = requiredEnv("CLAWSWEEPER_CRABFLEET_WORK_STATE_URL");
   const token = requiredEnv("CLAWSWEEPER_CRABFLEET_AGENT_TOKEN");
   const response = await fetch(url, {

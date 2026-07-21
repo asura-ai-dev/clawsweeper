@@ -9,6 +9,7 @@ import { isAllowedMutationActor, writePayload } from "./comment-router-utils.js"
 import { ghJsonWithRetry, ghPagedWithRetry, ghText } from "./github-cli.js";
 import type { JsonValue, LooseRecord } from "./json-types.js";
 import { parseArgs, parseJob, repoRoot } from "./lib.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 
 const PROGRESS_START = "<!-- clawsweeper-issue-implementation-progress:start -->";
 const PROGRESS_END = "<!-- clawsweeper-issue-implementation-progress:end -->";
@@ -196,6 +197,7 @@ export function renderIssueImplementationStatusComment(
 }
 
 async function postDashboardStatus(options: StatusOptions) {
+  if (!isOpenClawOrgTarget(options.repo)) return "skipped";
   const token = String(process.env.CLAWSWEEPER_STATUS_INGEST_TOKEN ?? "").trim();
   if (!token) return "skipped";
   const url =

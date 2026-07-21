@@ -39,8 +39,9 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
   CLAWSWEEPER_MODEL: internal
+  CLAWSWEEPER_TARGET_REPO: ${{ vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
 
 concurrency:
   group: commit-review-${{ github.event.inputs.target_repo || github.event.client_payload.target_repo || 'openclaw/openclaw' }}-${{ github.event.inputs.commit_sha || github.event.client_payload.after_sha || github.event.client_payload.commit_sha || github.run_id }}
@@ -105,7 +106,7 @@ jobs:
       - name: Resolve target repository
         id: target
         run: |
-          target_repo="${{ github.event.inputs.target_repo || github.event.client_payload.target_repo || 'openclaw/openclaw' }}"
+          target_repo="${{ github.event.inputs.target_repo || github.event.client_payload.target_repo || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}"
           if ! printf '%s' "$target_repo" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
             echo "Invalid target_repo: $target_repo" >&2
             exit 1
@@ -566,8 +567,8 @@ jobs:
         with:
           client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
           private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
-          owner: openclaw
-          repositories: clawsweeper
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
           permission-actions: write
           permission-contents: write
 
@@ -580,7 +581,7 @@ jobs:
           set -euo pipefail
           node dist/commit-sweeper.js dispatch-findings \
             --artifact-dir commit-artifacts \
-            --repair-repo openclaw/clawsweeper \
+            --repair-repo "${{ github.repository }}" \
             --repair-workflow repair-commit-finding-intake.yml \
             --dispatch-mode workflow_dispatch \
             --report-repo "${{ github.repository }}" \

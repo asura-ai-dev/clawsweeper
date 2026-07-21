@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { REPOSITORY_PROFILES, repositoryProfileFor } from "../dist/repository-profiles.js";
+import {
+  isOpenClawOrgTarget,
+  REPOSITORY_PROFILES,
+  repositoryProfileFor,
+} from "../dist/repository-profiles.js";
 
 test("OpenClaw allows unsponsored feature closes for issues only", () => {
   const profile = repositoryProfileFor("openclaw/openclaw");
@@ -49,6 +53,27 @@ test("repositoryProfileFor supports fs-safe event reviews", () => {
     "implemented_on_main",
     "mostly_implemented_on_main",
   ]);
+});
+
+test("Garuda uses a conservative repository-specific profile", () => {
+  const profile = repositoryProfileFor("Asura-AI-Dev/Garuda");
+
+  assert.equal(profile.targetRepo, "asura-ai-dev/garuda");
+  assert.equal(profile.slug, "asura-ai-dev-garuda");
+  assert.equal(profile.displayName, "Garuda");
+  assert.equal(profile.checkoutDir, "garuda");
+  assert.match(profile.promptNote, /newly onboarded private repository/);
+  assert.deepEqual(profile.applyCloseRules.issue, ["implemented_on_main"]);
+  assert.deepEqual(profile.applyCloseRules.pull_request, [
+    "implemented_on_main",
+    "mostly_implemented_on_main",
+  ]);
+});
+
+test("OpenClaw organization integrations are explicitly scoped", () => {
+  assert.equal(isOpenClawOrgTarget("OpenClaw/OpenClaw"), true);
+  assert.equal(isOpenClawOrgTarget("openclaw/clawhub"), true);
+  assert.equal(isOpenClawOrgTarget("asura-ai-dev/garuda"), false);
 });
 
 test("generic OpenClaw fallback supports conservative event-only onboarding", () => {

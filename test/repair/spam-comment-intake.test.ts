@@ -164,6 +164,7 @@ test("runSpamCommentIntake posts repository dispatch for accepted comments", asy
     env: {
       GITHUB_EVENT_PATH: eventPath,
       GITHUB_EVENT_NAME: "repository_dispatch",
+      GITHUB_REPOSITORY: "asura-ai-dev/clawsweeper",
       GH_TOKEN: "token",
     },
     fetch: async (input, init) => {
@@ -175,7 +176,10 @@ test("runSpamCommentIntake posts repository dispatch for accepted comments", asy
   assert.equal(summary.status, "ok");
   assert.equal(summary.dispatched, 1);
   assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.url, "https://api.github.com/repos/openclaw/clawsweeper/dispatches");
+  assert.equal(
+    requests[0]?.url,
+    "https://api.github.com/repos/asura-ai-dev/clawsweeper/dispatches",
+  );
   assert.deepEqual(requests[0]?.body, {
     event_type: "clawsweeper_spam_comment",
     client_payload: {

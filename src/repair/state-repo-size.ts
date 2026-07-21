@@ -23,8 +23,9 @@ function positiveNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 1_024 ? parsed : fallback;
 }
 
-function stateRepository(env: NodeJS.ProcessEnv): string {
-  const repository = env.STATE_REPOSITORY ?? DEFAULT_STATE_REPOSITORY;
+export function resolveStateRepository(env: NodeJS.ProcessEnv): string {
+  const repository =
+    env.CLAWSWEEPER_STATE_REPOSITORY ?? env.STATE_REPOSITORY ?? DEFAULT_STATE_REPOSITORY;
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
     throw new Error("state repository is invalid");
   }
@@ -46,7 +47,7 @@ export async function inspectStateRepoSize(
 ): Promise<StateRepoSize> {
   const env = options.env ?? process.env;
   const fetchImpl = options.fetchImpl ?? fetch;
-  const repository = stateRepository(env);
+  const repository = resolveStateRepository(env);
   const token = stateToken(env);
   const thresholdGb = positiveNumber(env.STATE_REPO_SIZE_WARN_GB, DEFAULT_STATE_REPO_SIZE_WARN_GB);
   const apiUrl = (env.GITHUB_API_URL ?? "https://api.github.com").replace(/\/$/, "");

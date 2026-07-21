@@ -3,7 +3,11 @@ import { appendFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { formatStateRepoSizeGb, inspectStateRepoSize } from "./state-repo-size.js";
+import {
+  formatStateRepoSizeGb,
+  inspectStateRepoSize,
+  resolveStateRepository,
+} from "./state-repo-size.js";
 
 export type StateCompactionOptions = {
   env?: NodeJS.ProcessEnv;
@@ -66,7 +70,7 @@ export async function createStateCompactionBackup(
   const env = options.env ?? process.env;
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? new Date();
-  const repository = env.STATE_REPOSITORY ?? "openclaw/clawsweeper-state";
+  const repository = resolveStateRepository(env);
   const branch = env.STATE_COMPACTION_BRANCH ?? "main";
   const expectedHead = env.STATE_COMPACTION_EXPECTED_HEAD ?? "";
   const token = env.CLAWSWEEPER_STATE_REPO_TOKEN ?? "";

@@ -18,6 +18,7 @@ import {
 } from "./comment-router-core.js";
 import { issueSourceRevisionSha256 } from "./issue-source-guard.js";
 import { hasSecuritySignal } from "./security-signals.js";
+import { DEFAULT_STATE_REPOSITORY, resolveStateRepository } from "./state-repo-size.js";
 import {
   CLOSE_PROTECTED_LABEL_NAMES,
   HUMAN_REVIEW_LABEL,
@@ -62,7 +63,7 @@ function prepare() {
   const targetRepo = stringArg("target-repo", stringArg("target_repo", "openclaw/openclaw"));
   const reportRepo = stringArg(
     "report-repo",
-    stringArg("report_repo", "openclaw/clawsweeper-state"),
+    stringArg("report_repo", process.env.CLAWSWEEPER_STATE_REPOSITORY ?? DEFAULT_STATE_REPOSITORY),
   );
   const itemNumber = positiveInteger(
     stringArg("item-number", stringArg("item_number", "")),
@@ -167,7 +168,7 @@ function candidates() {
   const targetRepo = stringArg("target-repo", stringArg("target_repo", "openclaw/openclaw"));
   const reportRepo = stringArg(
     "report-repo",
-    stringArg("report_repo", "openclaw/clawsweeper-state"),
+    stringArg("report_repo", process.env.CLAWSWEEPER_STATE_REPOSITORY ?? DEFAULT_STATE_REPOSITORY),
   );
   const reportDir = stringArg("report-dir", stringArg("report_dir", ""));
   const sourceDirs = [artifactDir, ...(reportDir ? [path.resolve(reportDir)] : [])];
@@ -1052,7 +1053,9 @@ function displayTitle(value: string) {
 }
 
 function reportBranch(reportRepo: string) {
-  return reportRepo.trim().toLowerCase() === "openclaw/clawsweeper-state" ? "state" : "main";
+  return reportRepo.trim().toLowerCase() === resolveStateRepository(process.env).toLowerCase()
+    ? "state"
+    : "main";
 }
 
 function stripQuotes(value: string) {

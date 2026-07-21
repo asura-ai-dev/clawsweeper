@@ -1,4 +1,5 @@
 import { isJsonObject } from "./json-types.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 
 export type OpenClawHookConfig = {
   hookUrl: string;
@@ -30,6 +31,8 @@ const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAYS_MS = [1000, 4000];
 
 export function resolveOpenClawHookConfig(env: NodeJS.ProcessEnv): OpenClawHookConfig | null {
+  const targetRepo = normalizeString(env.CLAWSWEEPER_TARGET_REPO);
+  if (targetRepo && !isOpenClawOrgTarget(targetRepo)) return null;
   const hookUrl = normalizeString(env.CLAWSWEEPER_OPENCLAW_HOOK_URL);
   const token = normalizeString(env.CLAWSWEEPER_OPENCLAW_HOOK_TOKEN);
   const discordTarget = normalizeString(env.CLAWSWEEPER_DISCORD_TARGET);

@@ -48,6 +48,18 @@ test("buildMergeNotification skips already-merged catch-up rows", () => {
   );
 });
 
+test("buildMergeNotification skips non-OpenClaw repositories", () => {
+  assert.equal(
+    buildMergeNotification({
+      repo: "asura-ai-dev/garuda",
+      target: "#123",
+      action: "merge_canonical",
+      status: "executed",
+    }),
+    null,
+  );
+});
+
 test("buildMergeNotification falls back when merge metadata is partial", () => {
   const withMergedAt = buildMergeNotification({
     repo: "openclaw/openclaw",

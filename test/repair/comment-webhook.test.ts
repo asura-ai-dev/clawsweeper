@@ -9,8 +9,24 @@ import {
   classifyWebhook,
   handleGitHubWebhook,
   renderFastAckComment,
+  resolveReviewRepo,
   verifyGitHubSignature,
 } from "../../dist/repair/comment-webhook.js";
+
+test("comment webhook resolves the fork control repository", () => {
+  assert.equal(
+    resolveReviewRepo({ GITHUB_REPOSITORY: "asura-ai-dev/clawsweeper" }),
+    "asura-ai-dev/clawsweeper",
+  );
+  assert.equal(
+    resolveReviewRepo({
+      GITHUB_REPOSITORY: "openclaw/clawsweeper",
+      CLAWSWEEPER_REVIEW_REPO: "asura-ai-dev/clawsweeper",
+    }),
+    "asura-ai-dev/clawsweeper",
+  );
+  assert.throws(() => resolveReviewRepo({ CLAWSWEEPER_REVIEW_REPO: "not-a-repository" }));
+});
 
 test("comment webhook accepts maintainer ClawSweeper commands", () => {
   const result = classifyIssueCommentWebhook({

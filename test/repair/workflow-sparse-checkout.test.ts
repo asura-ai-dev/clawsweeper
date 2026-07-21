@@ -103,7 +103,7 @@ test("repair comment router sparse checkout includes action ledger runtime", () 
 test("sweep workflow preserves one claimed target branch through exact review", () => {
   const workflow = readText(".github/workflows/sweep.yml");
   const dispatchTargetBranchResolver =
-    /target_branch="\$\{\{ github\.event_name == 'workflow_dispatch' && github\.event\.inputs\.target_branch \|\| github\.event\.client_payload\.target_branch \|\| 'main' \}\}"/g;
+    /target_branch="\$\{\{ github\.event_name == 'workflow_dispatch' && github\.event\.inputs\.target_branch \|\| github\.event\.client_payload\.target_branch \|\| env\.CLAWSWEEPER_TARGET_BRANCH \}\}"/g;
   const continuationTargetBranch =
     /-f target_branch="\$\{\{ needs\.plan\.outputs\.target_branch \}\}"/g;
   const recoveryTargetBranch =

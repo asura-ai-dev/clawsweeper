@@ -15,7 +15,7 @@ import { isExactReviewCloseGuardLabel } from "./exact-review-guard-labels.js";
 import { commentBodySha256 } from "./comment-router-utils.js";
 
 const DEFAULT_PORT = 8787;
-const REVIEW_REPO = "openclaw/clawsweeper";
+const DEFAULT_REVIEW_REPO = "openclaw/clawsweeper";
 const COMMAND_PATTERN =
   /(^|[ \t\r\n])@(?:clawsweeper|openclaw-clawsweeper)\b(?:\[bot\])?|(^|[ \t\r\n])\/(?:clawsweeper|review|re-review|rerun[ -]?review|status|explain|fix|build|implement|create[ -]?pr|fix[ -]?issue|autofix|auto[ -]?fix|automerge|auto[ -]?merge|approve|stop|autoclose)\b/i;
 const ALLOWED_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
@@ -75,6 +75,14 @@ export function startServer() {
   server.listen(port, () => {
     console.log(`[clawsweeper webhook] listening on :${port}`);
   });
+}
+
+export function resolveReviewRepo(env: NodeJS.ProcessEnv = process.env) {
+  const repository = env.CLAWSWEEPER_REVIEW_REPO ?? env.GITHUB_REPOSITORY ?? DEFAULT_REVIEW_REPO;
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+    throw new Error("review repository is invalid");
+  }
+  return repository;
 }
 
 async function handleRequest(request: http.IncomingMessage, response: http.ServerResponse) {
@@ -445,21 +453,22 @@ async function createInstallationToken({
 }
 
 async function createReviewRepoDispatchToken({ appJwt }: { appJwt: string }) {
+  const reviewRepo = resolveReviewRepo();
   const installation = await githubFetch({
     token: appJwt,
-    path: `/repos/${REVIEW_REPO}/installation`,
+    path: `/repos/${reviewRepo}/installation`,
     method: "GET",
     authScheme: "Bearer",
   });
   const installationId = Number(installation.id);
   if (!Number.isInteger(installationId) || installationId <= 0) {
-    throw new Error(`review repo installation response missing id for ${REVIEW_REPO}`);
+    throw new Error(`review repo installation response missing id for ${reviewRepo}`);
   }
   return createInstallationToken({
     appJwt,
     installationId,
-    label: REVIEW_REPO,
-    repositories: [repoName(REVIEW_REPO)],
+    label: reviewRepo,
+    repositories: [repoName(reviewRepo)],
     permissions: {
       contents: "write",
     },
@@ -711,9 +720,10 @@ async function dispatchItemReview({
   token: string;
   accepted: AcceptedItemWebhook;
 }) {
+  const reviewRepo = resolveReviewRepo();
   await githubFetch({
     token,
-    path: `/repos/${REVIEW_REPO}/dispatches`,
+    path: `/repos/${reviewRepo}/dispatches`,
     method: "POST",
     body: {
       event_type: "clawsweeper_item",
@@ -755,9 +765,10 @@ async function dispatchCommentRouter({
   commentUpdatedAt?: string;
   commentBodyDigest?: string;
 }) {
+  const reviewRepo = resolveReviewRepo();
   await githubFetch({
     token,
-    path: `/repos/${REVIEW_REPO}/dispatches`,
+    path: `/repos/${reviewRepo}/dispatches`,
     method: "POST",
     body: {
       event_type: "clawsweeper_comment",

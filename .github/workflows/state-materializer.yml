@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
 
 jobs:
   materialize:

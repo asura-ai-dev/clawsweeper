@@ -54,8 +54,9 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
   CLAWSWEEPER_MODEL: internal
+  CLAWSWEEPER_TARGET_REPO: ${{ vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
 
 concurrency:
   group: ${{ format('clawsweeper-assist-{0}-{1}-{2}', github.event.client_payload.target_repo || inputs.target_repo || 'openclaw/openclaw', github.event.client_payload.item_number || inputs.item_number || 'unknown', github.event.client_payload.comment_id || inputs.comment_id || 'manual') }}
@@ -78,7 +79,7 @@ jobs:
         env:
           DISPATCH_KEY: ${{ github.event.client_payload.dispatch_key || '' }}
           ITEM_NUMBER: ${{ github.event.client_payload.item_number || '?' }}
-          TARGET_REPO: ${{ github.event.client_payload.target_repo || 'openclaw/openclaw' }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail

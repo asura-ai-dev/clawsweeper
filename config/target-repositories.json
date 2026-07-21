@@ -43,6 +43,19 @@
       "package_manager": "pnpm",
       "validation_commands": [],
       "changed_gate": null
+    },
+    {
+      "target_repo": "asura-ai-dev/garuda",
+      "display_name": "Garuda",
+      "checkout_dir": "garuda",
+      "prompt_note": "Use the Garuda source tree and current default branch. This is a newly onboarded private repository, so review conservatively. Propose auto-close for issues and pull requests only when the exact requested change is certainly implemented on the default branch; for pull requests only, also allow age-gated mostly implemented on the default branch. Keep everything else open for maintainer triage. Garuda is an npm multi-package repository without a root package manifest, so select validation commands from the affected package rather than assuming a repository-root npm command.",
+      "apply_close_rules": {
+        "issue": ["implemented_on_main"],
+        "pull_request": ["implemented_on_main", "mostly_implemented_on_main"]
+      },
+      "package_manager": "npm",
+      "validation_commands": [],
+      "changed_gate": null
     }
   ],
   "generic_fallbacks": [

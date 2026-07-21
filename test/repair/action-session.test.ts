@@ -8,6 +8,7 @@ import {
   actionWorkKey,
   actionWorkKind,
 } from "../../dist/repair/action-session.js";
+import { isOpenClawOrgTarget } from "../../dist/repository-profiles.js";
 
 test("action session classifies issue implementation and PR repair work", () => {
   assert.equal(
@@ -42,6 +43,11 @@ test("action session reads the configured CrabFleet owner principal", () => {
     () => actionSessionOwner({}),
     /action session requires a configured CrabFleet owner/,
   );
+});
+
+test("CrabFleet scope excludes Garuda", () => {
+  assert.equal(isOpenClawOrgTarget("openclaw/openclaw"), true);
+  assert.equal(isOpenClawOrgTarget("asura-ai-dev/garuda"), false);
 });
 
 test("action session prefers the full source URL from the job body", () => {

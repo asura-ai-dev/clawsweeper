@@ -11,7 +11,9 @@ on:
 permissions: {}
 
 env:
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
+  CLAWSWEEPER_TARGET_REPO: ${{ vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
+  CLAWSWEEPER_TARGET_BRANCH: ${{ vars.CLAWSWEEPER_TARGET_BRANCH || 'main' }}
 
 concurrency:
   # Exact-review completions share one pending slot. Each surviving run scans all
@@ -181,8 +183,8 @@ jobs:
           REVIEW_PLACEHOLDER_MAX_CHECKS: ${{ vars.REVIEW_PLACEHOLDER_MAX_CHECKS || '20' }}
           REVIEW_PLACEHOLDER_MAX_RECOVERIES: ${{ vars.REVIEW_PLACEHOLDER_MAX_RECOVERIES || '5' }}
           REVIEW_PLACEHOLDER_MIN_AGE_HOURS: ${{ vars.REVIEW_PLACEHOLDER_MIN_AGE_HOURS || '2' }}
-          TARGET_BRANCH: main
-          TARGET_REPO: openclaw/openclaw
+          TARGET_BRANCH: ${{ env.CLAWSWEEPER_TARGET_BRANCH }}
+          TARGET_REPO: ${{ env.CLAWSWEEPER_TARGET_REPO }}
         run: node dist/review-placeholder-recovery.js
 
       - name: Clean scratch state branches and report repository size
@@ -192,8 +194,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           STATE_BRANCH_MAX_AGE_HOURS: ${{ vars.STATE_BRANCH_MAX_AGE_HOURS || '24' }}
           STATE_BRANCH_MAX_DELETIONS: ${{ vars.STATE_BRANCH_MAX_DELETIONS || '50' }}
-          STATE_BRANCH_RUN_REPOSITORY: openclaw/clawsweeper
-          STATE_REPOSITORY: openclaw/clawsweeper-state
+          STATE_BRANCH_RUN_REPOSITORY: ${{ github.repository }}
+          STATE_REPOSITORY: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY || 'openclaw/clawsweeper-state' }}
           STATE_REPO_SIZE_WARN_GB: ${{ vars.STATE_REPO_SIZE_WARN_GB || '5' }}
         run: |
           node dist/repair/state-branch-janitor.js

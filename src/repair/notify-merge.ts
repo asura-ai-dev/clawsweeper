@@ -6,6 +6,7 @@ import type { JsonObject, JsonValue } from "./json-types.js";
 import { asJsonObject, isJsonObject } from "./json-types.js";
 import { parseArgs, repoRoot } from "./lib.js";
 import { readJsonFile } from "./json-file.js";
+import { isOpenClawOrgTarget } from "../repository-profiles.js";
 import type {
   CollectionResult,
   MergeLedgerEntry,
@@ -106,7 +107,7 @@ export function buildMergeNotification(row: JsonObject): MergeNotification | nul
 
   const repo = stringOrNull(row.repo);
   const number = parseTargetNumber(row.target);
-  if (!repo || !number) return null;
+  if (!repo || !number || !isOpenClawOrgTarget(repo)) return null;
 
   const mergeCommitSha = stringOrNull(row.merge_commit_sha);
   const mergedAt = stringOrNull(row.merged_at);

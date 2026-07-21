@@ -15,12 +15,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: idea-archive-revival-${{ github.event.inputs.target_repo || 'openclaw/openclaw' }}
+  group: idea-archive-revival-${{ github.event.inputs.target_repo || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
   cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
+  CLAWSWEEPER_TARGET_REPO: ${{ vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
 
 jobs:
   revive:
@@ -37,7 +38,7 @@ jobs:
       - name: Resolve target repository
         id: target
         env:
-          TARGET_REPO: ${{ github.event.inputs.target_repo || 'openclaw/openclaw' }}
+          TARGET_REPO: ${{ github.event.inputs.target_repo || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
         run: |
           set -euo pipefail
           case "$TARGET_REPO" in

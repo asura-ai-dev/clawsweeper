@@ -208,8 +208,12 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  CLAWSWEEPER_APP_CLIENT_ID: Iv23liOECG0slfuhz093
+  CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
   CLAWSWEEPER_MODEL: internal
+  CLAWSWEEPER_TARGET_REPO: ${{ vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
+  CLAWSWEEPER_TARGET_BRANCH: ${{ vars.CLAWSWEEPER_TARGET_BRANCH || 'main' }}
+  CLAWSWEEPER_SELF_REPO: ${{ startsWith(github.repository, 'openclaw/') && github.repository || vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
+  CLAWSWEEPER_STATE_REPOSITORY: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY || 'openclaw/clawsweeper-state' }}
 
 concurrency:
   group: ${{ (github.event_name == 'schedule' && (github.event.schedule == '4/15 * * * *' || github.event.schedule == '41 * * * *' || github.event.schedule == '37 */6 * * *')) && format('clawsweeper-target-fanout-{0}', github.event.schedule || github.run_id) || github.event_name == 'repository_dispatch' && format('clawsweeper-event-{0}-{1}', github.event.client_payload.target_repo || 'openclaw/openclaw', github.event.client_payload.queue_lease_id || github.event.client_payload.item_number || github.run_id) || format('{0}-{1}', (github.event_name == 'schedule' && github.event.schedule == '13 * * * *') && 'clawsweeper-failed-review-retry' || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply_existing == 'true' && github.event.inputs.apply_sync_comments_only == 'true') && format('clawsweeper-comment-sync-{0}', github.run_id) || (github.event_name == 'schedule' && github.event.schedule == '6,21,36,51 * * * *') && 'clawsweeper-comment-sync' || (github.event_name == 'workflow_dispatch' && github.event.inputs.apply_existing == 'true') && format('clawsweeper-apply-{0}', github.run_id) || (github.event_name == 'schedule' && (github.event.schedule == '3 * * * *' || github.event.schedule == '18 * * * *' || github.event.schedule == '33 * * * *' || github.event.schedule == '48 * * * *' || github.event.schedule == '8,23,38,53 * * * *')) && 'clawsweeper-apply' || (github.event_name == 'workflow_dispatch' && (github.event.inputs.item_number != '' || github.event.inputs.item_numbers != '')) && format('clawsweeper-intake-exact-{0}', github.event.inputs.item_number || github.event.inputs.item_numbers) || ((github.event_name == 'workflow_dispatch' && github.event.inputs.hot_intake == 'true') || (github.event_name == 'schedule' && (github.event.schedule == '*/5 * * * *' || github.event.schedule == '2/5 * * * *'))) && 'clawsweeper-intake-v2' || ((github.event_name == 'workflow_dispatch' && github.event.inputs.audit_dashboard == 'true') || (github.event_name == 'schedule' && (github.event.schedule == '7 */6 * * *' || github.event.schedule == '12 */6 * * *' || github.event.schedule == '17 */6 * * *'))) && 'clawsweeper-audit' || 'clawsweeper-review', github.event.inputs.target_repo || github.event.client_payload.target_repo || ((github.event.schedule == '17 */6 * * *') && 'openclaw/clawsweeper' || ((github.event.schedule == '2/5 * * * *' || github.event.schedule == '22 * * * *' || github.event.schedule == '8,23,38,53 * * * *' || github.event.schedule == '12 */6 * * *') && 'openclaw/clawhub' || 'openclaw/openclaw'))) }}
@@ -2242,14 +2246,14 @@ jobs:
         id: target
         run: |
           target_repo="${{ github.event.inputs.target_repo || github.event.client_payload.target_repo || '' }}"
-          target_branch="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_branch || github.event.client_payload.target_branch || 'main' }}"
+          target_branch="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_branch || github.event.client_payload.target_branch || env.CLAWSWEEPER_TARGET_BRANCH }}"
           if [ -z "$target_repo" ]; then
             case "${{ github.event.schedule || '' }}" in
               "2/5 * * * *"|"22 * * * *"|"8,23,38,53 * * * *"|"12 */6 * * *")
                 target_repo="openclaw/clawhub"
                 ;;
               *)
-                target_repo="openclaw/openclaw"
+                target_repo="$CLAWSWEEPER_TARGET_REPO"
               ;;
             esac
           fi
@@ -3355,7 +3359,7 @@ jobs:
             --target-repo "$TARGET_REPO" \
             --artifact-dir artifacts \
             --report-dir "records/$target_slug/items" \
-            --report-repo openclaw/clawsweeper-state)"
+            --report-repo "$CLAWSWEEPER_STATE_REPOSITORY")"
           echo "$candidate_output"
           CANDIDATE_OUTPUT="$candidate_output" MAX_DISPATCH="$MAX_DISPATCH" node <<'NODE' > /tmp/viable-implementation-candidates.tsv
           const output = JSON.parse(process.env.CANDIDATE_OUTPUT || "{}");
@@ -3376,7 +3380,7 @@ jobs:
               -f target_repo="$TARGET_REPO" \
               -f item_number="$item_number" \
               -f candidate_kind=viable \
-              -f report_repo=openclaw/clawsweeper-state \
+              -f report_repo="$CLAWSWEEPER_STATE_REPOSITORY" \
               -f report_path="$report_path" \
               -f report_url="$report_url" \
               -f model=internal
@@ -3767,7 +3771,7 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_REPO: openclaw/openclaw
+          TARGET_REPO: ${{ env.CLAWSWEEPER_TARGET_REPO }}
           DRY_RUN: ${{ vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_ENABLED == '1' && 'false' || 'true' }}
           RETRY_LIMIT: ${{ vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_LIMIT || '3' }}
           RETRY_MAX_ATTEMPTS: ${{ vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_MAX_ATTEMPTS || '2' }}
@@ -3777,6 +3781,7 @@ jobs:
         run: |
           set -euo pipefail
           git pull --rebase --autostash
+          target_slug="${TARGET_REPO//\//-}"
           dry_run_arg=()
           if [ "$DRY_RUN" = "true" ]; then
             dry_run_arg=(--dry-run)
@@ -3792,7 +3797,7 @@ jobs:
             --codex-timeout-ms "$CODEX_TIMEOUT_MS" \
             --workflow-repo "$GITHUB_REPOSITORY" \
             --workflow-ref main \
-            --state-dir results/failed-review-retries/openclaw-openclaw \
+            --state-dir "results/failed-review-retries/$target_slug" \
             --report-path artifacts/failed-review-retry-report.json \
             "${dry_run_arg[@]}"
           retry_exit_code=$?
@@ -3817,11 +3822,17 @@ jobs:
           pnpm run --silent finalize-action-events -- "${args[@]}"
 
       - name: Publish failed-review retry state
-        if: ${{ always() && vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_ENABLED == '1' && hashFiles('results/failed-review-retries/openclaw-openclaw/*.json') != '' }}
+        if: ${{ always() && vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_ENABLED == '1' }}
         run: |
+          target_slug="${CLAWSWEEPER_TARGET_REPO//\//-}"
+          state_dir="results/failed-review-retries/$target_slug"
+          if ! compgen -G "$state_dir/*.json" >/dev/null; then
+            echo "No failed-review retry state to publish for $CLAWSWEEPER_TARGET_REPO."
+            exit 0
+          fi
           pnpm run repair:publish-main -- \
             --message "chore: update failed review retry state" \
-            --path results/failed-review-retries/openclaw-openclaw \
+            --path "$state_dir" \
             --rebase-strategy theirs
 
       - name: Publish failed-review retry action ledger
@@ -3901,10 +3912,10 @@ jobs:
                 target_repo="openclaw/clawhub"
                 ;;
               "17 */6 * * *")
-                target_repo="openclaw/clawsweeper"
+                target_repo="$CLAWSWEEPER_SELF_REPO"
                 ;;
               *)
-                target_repo="openclaw/openclaw"
+                target_repo="$CLAWSWEEPER_TARGET_REPO"
                 ;;
             esac
           fi
@@ -3998,11 +4009,12 @@ jobs:
             --rebase-strategy theirs
 
       - name: Refresh state dashboard
+        if: ${{ startsWith(steps.target.outputs.target_repo, 'openclaw/') }}
         env:
           GH_TOKEN: ${{ steps.state-token.outputs.token }}
         run: |
           gh workflow run dashboard.yml \
-            --repo openclaw/clawsweeper-state \
+            --repo "$CLAWSWEEPER_STATE_REPOSITORY" \
             --ref main || echo "Best-effort dashboard refresh dispatch failed; scheduled state dashboard will retry."
 
   apply-proof:
@@ -4047,7 +4059,7 @@ jobs:
           if [ -z "$target_repo" ]; then
             case "${{ github.event.schedule || '' }}" in
               "8,23,38,53 * * * *") target_repo="openclaw/clawhub" ;;
-              *) target_repo="openclaw/openclaw" ;;
+              *) target_repo="$CLAWSWEEPER_TARGET_REPO" ;;
             esac
           fi
           echo "target_repo=$target_repo" >> "$GITHUB_OUTPUT"
@@ -4352,7 +4364,7 @@ jobs:
                 target_repo="openclaw/clawhub"
                 ;;
               *)
-                target_repo="openclaw/openclaw"
+                target_repo="$CLAWSWEEPER_TARGET_REPO"
                 ;;
             esac
           fi
@@ -4924,7 +4936,7 @@ jobs:
             pnpm run --silent workflow -- apply-continuation-blocker \
               --runs "$runs_json" \
               --current-run-id "${{ github.run_id }}" \
-              --target-repo "${APPLY_TARGET_REPO:-openclaw/openclaw}" > "$continuation_env"
+              --target-repo "${APPLY_TARGET_REPO:-$CLAWSWEEPER_TARGET_REPO}" > "$continuation_env"
             rm -f "$runs_json"
             cat "$continuation_env"
             APPLY_CONTINUATION_BLOCKED="$(awk -F= '$1 == "APPLY_CONTINUATION_BLOCKED" { print $2 }' "$continuation_env")"
