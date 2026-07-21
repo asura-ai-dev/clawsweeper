@@ -5,20 +5,37 @@ description: Use the Crabbox wrapper for validation across Linux, macOS, Windows
 
 # Crabbox
 
-Use the Crabbox wrapper when OpenClaw needs remote Linux proof for broad tests,
-CI-parity checks, secrets, hosted services, Docker/E2E/package lanes, warmed
-reusable boxes, sync timing, logs/results, cache inspection, or lease cleanup.
+## Provider Selection Contract
+
+Resolve the provider before deciding whether validation is local or remote. Run
+`crabbox config show` from the exact worktree being tested; a session may have
+started in another checkout whose repository config or skill text is stale. A
+request to "use Crabbox" does not authorize a provider override. When the user
+does not name a backend, omit `--provider` and preserve the resolved provider,
+including `local-container` from user config or `CRABBOX_PROVIDER`.
+
+`local-container` is an isolated Crabbox backend, not a broad test running
+directly on the laptop. Broad gates may run there when it is the resolved
+provider. Override it only when the user or an indispensable proof requirement
+explicitly names a different backend; explain that requirement before starting
+the override.
+
+Use the Crabbox wrapper when OpenClaw needs isolated Linux proof for broad
+tests, CI-parity checks, secrets, hosted services, Docker/E2E/package lanes,
+warmed reusable boxes, sync timing, logs/results, cache inspection, or lease
+cleanup.
 
 Crabbox is the transport/orchestration surface. The actual backend can be:
 
+- local Docker isolation: `provider=local-container`, lease ids like `cbx_...`
 - brokered AWS Crabbox: direct provider, `provider=aws`, lease ids like
   `cbx_...`, `syncDelegated=false`
 - Blacksmith Testbox through Crabbox: delegated provider,
   `provider=blacksmith-testbox`, ids like `tbx_...`, `syncDelegated=true`
 
 For OpenClaw maintainer broad `pnpm` gates, Blacksmith Testbox through the
-Crabbox wrapper is acceptable and often preferred when the standing Testbox
-rules apply. Do not describe those runs as "AWS Crabbox"; report them as
+Crabbox wrapper is acceptable when the resolved provider or requested proof
+lane selects it. Do not describe those runs as "AWS Crabbox"; report them as
 Testbox-through-Crabbox with the `tbx_...` id and Actions run.
 
 Use the repo `.crabbox.yaml` brokered AWS path when the task specifically needs
@@ -62,12 +79,13 @@ command -v crabbox
   config pins hot `eu-west-1a/b/c` placement so Fast Snapshot Restore can apply.
   If warmup drifts well past the minute-scale path, verify image promotion,
   region/AZ placement, and FSR state before blaming OpenClaw.
-- For broad OpenClaw maintainer `pnpm` gates, prefer the repo wrapper with
-  `--provider blacksmith-testbox` or the repo Testbox helpers when the standing
-  Testbox policy applies.
-- Always report the actual provider and id. `cbx_...` means AWS Crabbox;
-  `tbx_...` means Blacksmith Testbox through Crabbox. If the output only says
-  `blacksmith testbox list`, use `blacksmith testbox list --all` before
+- For broad OpenClaw maintainer `pnpm` gates, use the resolved provider. Select
+  `--provider blacksmith-testbox` or the repo Testbox helpers only when the user
+  or an indispensable proof requirement specifically calls for Testbox.
+- Always report the provider field and id. Both local-container and direct
+  providers can use `cbx_...`, so the id prefix alone does not prove AWS;
+  `tbx_...` identifies Blacksmith Testbox through Crabbox. If the output only
+  says `blacksmith testbox list`, use `blacksmith testbox list --all` before
   concluding no box exists.
 - If a warm direct-provider lease smells stale, retry with `--full-resync`
   (alias `--fresh-sync`) before replacing the lease. This resets the remote
@@ -79,7 +97,8 @@ command -v crabbox
   not leave it in remote shell history or logs. If no secret-safe injection path
   is available, say true live provider auth is blocked instead of silently using
   a fake key.
-- Prefer local targeted tests for tight edit loops. Broad gates belong remote.
+- Prefer local targeted tests for tight edit loops. Keep broad gates inside the
+  resolved Crabbox backend; `local-container` satisfies this isolation boundary.
 - Do not treat unrelated inherited shell controls as operator intent. In
   particular, `OPENCLAW_LOCAL_CHECK_MODE=throttled` from the local shell is not
   permission to move broad `pnpm check:changed`, `pnpm test:changed`, full
