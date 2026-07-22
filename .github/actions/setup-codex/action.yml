@@ -8,7 +8,7 @@ inputs:
     description: Exact Codex Responses proxy npm package version.
     default: "0.139.0"
   auth-mode:
-    description: Authentication mode. Use proxy to keep OPENAI_API_KEY out of Codex subprocesses, or login for legacy codex login.
+    description: Authentication mode. Use proxy to keep OPENAI_API_KEY out of Codex subprocesses, chatgpt for a restored ChatGPT OAuth login, or login for legacy codex login.
     default: "proxy"
   codex-home:
     description: CODEX_HOME directory. Defaults to an isolated per-run ClawSweeper directory.
@@ -124,8 +124,39 @@ runs:
           codex login status
         fi
 
+    - name: Authenticate Codex with ChatGPT OAuth
+      if: ${{ inputs['auth-mode'] == 'chatgpt' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        export CODEX_HOME="${CODEX_HOME:?}"
+        test -n "${CLAWSWEEPER_CODEX_AUTH_JSON:-}"
+        umask 077
+        auth_path="$CODEX_HOME/auth.json"
+        trap 'rm -f "$auth_path"' ERR
+        printf '%s' "$CLAWSWEEPER_CODEX_AUTH_JSON" | base64 --decode > "$auth_path"
+        chmod 600 "$auth_path"
+        node -e '
+          const fs = require("node:fs");
+          const auth = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const containers = [auth, auth.tokens].filter(
+            (value) => value && typeof value === "object",
+          );
+          for (const key of ["access_token", "refresh_token", "id_token"]) {
+            for (const container of containers) {
+              const value = container[key];
+              if (typeof value !== "string" || value.length === 0) continue;
+              if (/[\r\n]/.test(value)) throw new Error(`Invalid newline in ${key}`);
+              process.stdout.write(`::add-mask::${value}\n`);
+              break;
+            }
+          }
+        ' "$auth_path"
+        codex login status
+        trap - ERR
+
     - name: Reject unknown Codex auth mode
-      if: ${{ inputs['auth-mode'] != 'proxy' && inputs['auth-mode'] != 'login' }}
+      if: ${{ inputs['auth-mode'] != 'proxy' && inputs['auth-mode'] != 'login' && inputs['auth-mode'] != 'chatgpt' }}
       shell: bash
       run: |
         echo "Unsupported setup-codex auth-mode: ${{ inputs['auth-mode'] }}" >&2

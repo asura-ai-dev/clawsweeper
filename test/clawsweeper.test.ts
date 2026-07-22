@@ -12,6 +12,7 @@ import {
   codexEnv,
   codexLoginConfig,
   codexLoginMethod,
+  codexServiceTier,
   coverageProofRetryExhaustedRuntimeBudget,
   dashboardFailedReviewRetryActivityForTest,
   dashboardClosedAt,
@@ -2308,6 +2309,19 @@ test("Codex workflows install pinned CLI releases and keep the model secret", ()
   assert.doesNotMatch(localCheck, /CLAWSWEEPER_PREFER_WINDOWS_CODEX_APP/);
   assert.doesNotMatch(localCheck, /gpt-5\.5/);
   assert.match(action, /env -u OPENAI_API_KEY[\s\S]*-u CLAWSWEEPER_INTERNAL_MODEL/);
+  assert.match(action, /Authenticate Codex with ChatGPT OAuth/);
+  assert.match(action, /inputs\['auth-mode'\] == 'chatgpt'/);
+  assert.match(action, /CLAWSWEEPER_CODEX_AUTH_JSON/);
+  assert.match(action, /base64 --decode/);
+  assert.match(action, /access_token/);
+  assert.match(action, /refresh_token/);
+  assert.match(action, /id_token/);
+  assert.match(action, /::add-mask::/);
+  assert.match(action, /codex login status/);
+  assert.match(
+    action,
+    /inputs\['auth-mode'\] != 'proxy'[\s\S]*inputs\['auth-mode'\] != 'login'[\s\S]*inputs\['auth-mode'\] != 'chatgpt'/,
+  );
   assert.equal(action.match(/--ignore-scripts/g)?.length, 2);
   for (const workflow of workflows) {
     assert.match(workflow, /CLAWSWEEPER_MODEL: internal/);
@@ -2318,6 +2332,67 @@ test("Codex workflows install pinned CLI releases and keep the model secret", ()
       .filter((candidate) => /(?:OPENAI_API_KEY|CLAWSWEEPER_INTERNAL_MODEL):/.test(candidate))) {
       assert.match(line, /^\s{10,}/);
     }
+  }
+});
+
+test("all setup-codex workflow jobs support ChatGPT OAuth and remove restored auth", () => {
+  const workflowCalls = new Map<string, number>([
+    [".github/workflows/assist.yml", 1],
+    [".github/workflows/commit-review.yml", 1],
+    [".github/workflows/maintainer-activity-report.yml", 1],
+    [".github/workflows/repair-cluster-worker.yml", 2],
+    [".github/workflows/repair-commit-finding-intake.yml", 1],
+    [".github/workflows/sweep.yml", 3],
+  ]);
+
+  for (const [file, expectedCalls] of workflowCalls) {
+    const workflow = readText(file);
+    assert.match(
+      workflow,
+      /^env:\n(?:  .*\n)*  CLAWSWEEPER_CODEX_LOGIN_METHOD: \$\{\{ vars\.CLAWSWEEPER_CODEX_LOGIN_METHOD \|\| 'api' \}\}$/m,
+      `${file} should expose the login method to Codex subprocesses`,
+    );
+    assert.equal(
+      workflow.match(/uses: (?:\.\/|\.\/clawsweeper\/)\.github\/actions\/setup-codex/g)?.length,
+      expectedCalls,
+      `${file} setup-codex call count`,
+    );
+    assert.equal(
+      workflow.match(
+        /CLAWSWEEPER_CODEX_AUTH_JSON: \$\{\{ secrets\.CLAWSWEEPER_CODEX_AUTH_JSON \}\}/g,
+      )?.length,
+      expectedCalls,
+      `${file} OAuth secret injection count`,
+    );
+    assert.equal(
+      workflow.match(
+        /auth-mode: \$\{\{ vars\.CLAWSWEEPER_CODEX_LOGIN_METHOD == 'chatgpt' && 'chatgpt' \|\| 'proxy' \}\}/g,
+      )?.length,
+      expectedCalls,
+      `${file} auth-mode switch count`,
+    );
+    assert.equal(
+      workflow.match(/- name: Remove Codex OAuth credentials/g)?.length,
+      expectedCalls,
+      `${file} cleanup step count`,
+    );
+    assert.equal(
+      workflow.match(/rm -f "\$CODEX_HOME\/auth\.json"/g)?.length,
+      expectedCalls,
+      `${file} cleanup command count`,
+    );
+  }
+
+  for (const file of [
+    ".github/workflows/repair-cluster-worker.yml",
+    ".github/workflows/repair-commit-finding-intake.yml",
+    ".github/workflows/sweep.yml",
+  ]) {
+    assert.match(
+      readText(file),
+      /^  CLAWSWEEPER_CODEX_SERVICE_TIER: \$\{\{ vars\.CLAWSWEEPER_CODEX_SERVICE_TIER \|\| 'fast' \}\}$/m,
+      `${file} should expose the service-tier opt-out to Codex calls`,
+    );
   }
 });
 
@@ -2781,6 +2856,14 @@ test("Codex login method defaults to API and accepts explicit local OAuth", () =
   assert.equal(codexLoginMethod(" API "), "api");
   assert.equal(codexLoginMethod(" chatgpt "), "chatgpt");
   assert.equal(codexLoginConfig("chatgpt"), 'forced_login_method="chatgpt"');
+});
+
+test("Codex service tier keeps fast as the default and supports explicit omission", () => {
+  assert.equal(codexServiceTier(undefined), "fast");
+  assert.equal(codexServiceTier(""), "fast");
+  assert.equal(codexServiceTier(" fast "), "fast");
+  assert.equal(codexServiceTier("default"), "");
+  assert.equal(codexServiceTier(" DEFAULT "), "");
 });
 
 test("Codex login method reads the environment without leaking test state", () => {

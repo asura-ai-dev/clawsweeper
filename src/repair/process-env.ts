@@ -1,4 +1,9 @@
-import { codexLoginConfig, codexModelArgs, internalCodexModel } from "../codex-env.js";
+import {
+  codexLoginConfig,
+  codexModelArgs,
+  codexServiceTier,
+  internalCodexModel,
+} from "../codex-env.js";
 
 export { codexLoginConfig, codexModelArgs, internalCodexModel };
 
@@ -35,7 +40,7 @@ export function repairCodexReasoningEffort(value = process.env.CLAWSWEEPER_CODEX
 }
 
 export function repairCodexServiceTier(value = process.env.CLAWSWEEPER_CODEX_SERVICE_TIER) {
-  return String(value ?? "fast").trim() || "fast";
+  return codexServiceTier(value);
 }
 
 export function clawsweeperGitUserName(): string {

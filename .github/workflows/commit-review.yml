@@ -40,6 +40,7 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
+  CLAWSWEEPER_CODEX_LOGIN_METHOD: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD || 'api' }}
   CLAWSWEEPER_MODEL: internal
   CLAWSWEEPER_TARGET_REPO: ${{ vars.CLAWSWEEPER_TARGET_REPO || 'openclaw/openclaw' }}
 
@@ -425,8 +426,10 @@ jobs:
       - uses: ./clawsweeper/.github/actions/setup-codex
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLAWSWEEPER_CODEX_AUTH_JSON: ${{ secrets.CLAWSWEEPER_CODEX_AUTH_JSON }}
           CLAWSWEEPER_INTERNAL_MODEL: ${{ secrets.CLAWSWEEPER_MODEL }}
         with:
+          auth-mode: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD == 'chatgpt' && 'chatgpt' || 'proxy' }}
           login-status: "true"
 
       - name: Check out target main
@@ -509,6 +512,16 @@ jobs:
           name: commit-review-${{ matrix.sha }}
           path: commit-artifacts
           if-no-files-found: ignore
+
+      - name: Remove Codex OAuth credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${CODEX_HOME:-}" ]; then
+            rm -f "$CODEX_HOME/auth.json"
+            test ! -f "$CODEX_HOME/auth.json"
+          fi
 
   publish:
     name: Commit reports

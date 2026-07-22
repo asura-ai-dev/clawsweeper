@@ -73,6 +73,8 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
+  CLAWSWEEPER_CODEX_LOGIN_METHOD: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD || 'api' }}
+  CLAWSWEEPER_CODEX_SERVICE_TIER: ${{ vars.CLAWSWEEPER_CODEX_SERVICE_TIER || 'fast' }}
   CLAWSWEEPER_MODEL: internal
 
 concurrency:
@@ -246,8 +248,10 @@ jobs:
         if: ${{ steps.check_job.outputs.job_exists == '1' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLAWSWEEPER_CODEX_AUTH_JSON: ${{ secrets.CLAWSWEEPER_CODEX_AUTH_JSON }}
           CLAWSWEEPER_INTERNAL_MODEL: ${{ secrets.CLAWSWEEPER_MODEL }}
         with:
+          auth-mode: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD == 'chatgpt' && 'chatgpt' || 'proxy' }}
           codex-home: ${{ steps.codex_session.outputs.codex_home }}
 
       - name: Restore Codex session
@@ -404,6 +408,16 @@ jobs:
         continue-on-error: true
         run: pnpm run repair:action-session -- update --state blocked --phase planning_failed --summary "Planning Action failed" --completion-reason action_failed
 
+      - name: Remove Codex OAuth credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${CODEX_HOME:-}" ]; then
+            rm -f "$CODEX_HOME/auth.json"
+            test ! -f "$CODEX_HOME/auth.json"
+          fi
+
   execute:
     name: Execute and apply cluster actions
     needs: cluster
@@ -527,8 +541,10 @@ jobs:
         if: ${{ steps.check_job.outputs.job_exists == '1' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLAWSWEEPER_CODEX_AUTH_JSON: ${{ secrets.CLAWSWEEPER_CODEX_AUTH_JSON }}
           CLAWSWEEPER_INTERNAL_MODEL: ${{ secrets.CLAWSWEEPER_MODEL }}
         with:
+          auth-mode: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD == 'chatgpt' && 'chatgpt' || 'proxy' }}
           cache-suffix: target-pnpm
           codex-home: ${{ steps.codex_session.outputs.codex_home }}
 
@@ -910,3 +926,13 @@ jobs:
             --session-id "$AUTOMERGE_SESSION_ID" \
             --run-url "$AUTOMERGE_RUN_URL" \
             --run-conclusion failure
+
+      - name: Remove Codex OAuth credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${CODEX_HOME:-}" ]; then
+            rm -f "$CODEX_HOME/auth.json"
+            test ! -f "$CODEX_HOME/auth.json"
+          fi

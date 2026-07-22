@@ -32,6 +32,7 @@ import {
   codexEnv,
   codexLoginConfig,
   codexModelArgs,
+  codexServiceTier,
   PUBLIC_CODEX_MODEL,
   redactInternalCodexModel,
 } from "./codex-env.js";
@@ -222,6 +223,7 @@ export {
   codexEnv,
   codexLoginConfig,
   codexLoginMethod,
+  codexServiceTier,
   redactInternalCodexModel,
 } from "./codex-env.js";
 export {
@@ -1452,7 +1454,7 @@ const DEFAULT_CODEX_MODEL = PUBLIC_CODEX_MODEL;
 const DEFAULT_REASONING_EFFORT = "high";
 // Priority service tier for Codex calls (maintainer decision 2026-07-17:
 // "gpt 5.6 sol high fast"). Latency-only; excluded from review-policy hashing.
-const DEFAULT_SERVICE_TIER = "fast";
+const DEFAULT_SERVICE_TIER = codexServiceTier();
 const DEFAULT_REVIEW_CODEX_TIMEOUT_MS = 1_200_000;
 const DEFAULT_CODEX_FALLBACK_MIN_BUDGET_MS = 120_000;
 const REVIEW_POLICY_VERSION = "2026-07-09-policy-v24";

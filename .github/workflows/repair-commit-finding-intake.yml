@@ -47,6 +47,8 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   CLAWSWEEPER_APP_CLIENT_ID: ${{ vars.CLAWSWEEPER_APP_CLIENT_ID || 'Iv23liOECG0slfuhz093' }}
+  CLAWSWEEPER_CODEX_LOGIN_METHOD: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD || 'api' }}
+  CLAWSWEEPER_CODEX_SERVICE_TIER: ${{ vars.CLAWSWEEPER_CODEX_SERVICE_TIER || 'fast' }}
   CLAWSWEEPER_ALLOWED_OWNER: ${{ vars.CLAWSWEEPER_ALLOWED_OWNER || 'openclaw' }}
   CLAWSWEEPER_ALLOW_EXECUTE: ${{ vars.CLAWSWEEPER_ALLOW_EXECUTE == '1' && '1' || '0' }}
   CLAWSWEEPER_ALLOW_FIX_PR: ${{ vars.CLAWSWEEPER_ALLOW_FIX_PR == '1' && '1' || '0' }}
@@ -150,9 +152,11 @@ jobs:
       - uses: ./.github/actions/setup-codex
         if: ${{ steps.prepare.outputs.should_repair == 'true' }}
         with:
+          auth-mode: ${{ vars.CLAWSWEEPER_CODEX_LOGIN_METHOD == 'chatgpt' && 'chatgpt' || 'proxy' }}
           cache-suffix: target-pnpm
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLAWSWEEPER_CODEX_AUTH_JSON: ${{ secrets.CLAWSWEEPER_CODEX_AUTH_JSON }}
           CLAWSWEEPER_INTERNAL_MODEL: ${{ secrets.CLAWSWEEPER_MODEL }}
 
       - name: Review synthetic result
@@ -212,3 +216,13 @@ jobs:
       - name: Fail on repair failure
         if: ${{ steps.prepare.outputs.should_repair == 'true' && steps.execute.outcome == 'failure' }}
         run: exit 1
+
+      - name: Remove Codex OAuth credentials
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${CODEX_HOME:-}" ]; then
+            rm -f "$CODEX_HOME/auth.json"
+            test ! -f "$CODEX_HOME/auth.json"
+          fi

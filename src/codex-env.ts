@@ -24,6 +24,12 @@ export function codexLoginConfig(value?: string): string {
   return `forced_login_method="${codexLoginMethod(value)}"`;
 }
 
+export function codexServiceTier(value = process.env.CLAWSWEEPER_CODEX_SERVICE_TIER): string {
+  const normalized = String(value ?? "").trim();
+  if (normalized.toLowerCase() === "default") return "";
+  return normalized || "fast";
+}
+
 export function internalCodexModel(requestedModel: string): string {
   return process.env.CLAWSWEEPER_INTERNAL_MODEL?.trim() || requestedModel;
 }

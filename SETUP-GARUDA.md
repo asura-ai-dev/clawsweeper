@@ -4,6 +4,8 @@
 `asura-ai-dev/garuda` をレビュー・保守するための人間側セットアップ手順です。
 秘密値の作成・登録、GitHub App の作成・install、state repository の作成、Cloudflare
 の deploy はこのリポジトリのコード変更には含まれません。
+ChatGPT subscription 認証の前提、脅威モデル、段階検証は
+[Garuda subscription auth design](docs/garuda-subscription-auth-design.md) を参照してください。
 
 ## 1. GitHub App を作成する
 
@@ -45,8 +47,20 @@ gh secret set CLAWSWEEPER_WEBHOOK_SECRET --repo asura-ai-dev/clawsweeper
 gh secret set CLAWSWEEPER_STATUS_INGEST_TOKEN --repo asura-ai-dev/clawsweeper
 ```
 
+ChatGPT subscription 認証を使う場合は、専用 `CODEX_HOME` で人間が login した後、
+`auth.json` 全体を base64 化して追加 secret として登録します。JSON や token を標準出力、
+shell 引数、リポジトリ内のファイルへ出さないでください。
+
+```bash
+CODEX_HOME=/secure/path/garuda-codex codex login
+base64 < /secure/path/garuda-codex/auth.json | gh secret set CLAWSWEEPER_CODEX_AUTH_JSON --repo asura-ai-dev/clawsweeper
+```
+
 - `CLAWSWEEPER_APP_PRIVATE_KEY`: 上で作成した GitHub App の秘密鍵。
-- `OPENAI_API_KEY`: Codex 実行用 API key。
+- `OPENAI_API_KEY`: API/proxy 認証を使う場合の Codex 実行用 API key。ChatGPT subscription
+  認証では Codex CLI 用には不要ですが、model 判定付き spam scan を使う場合は別途必要です。
+- `CLAWSWEEPER_CODEX_AUTH_JSON`: ChatGPT subscription 認証時だけ必要な、base64 化した
+  Codex `auth.json`。復号後の token は workflow 内で mask され、各 job の末尾で削除されます。
 - `CLAWSWEEPER_MODEL`: 利用する model alias。実値は契約・運用側で決めます。
 - `CLAWSWEEPER_WEBHOOK_SECRET`: queue/webhook payload の署名検証用。受信側と同じ値を設定します。
 - `CLAWSWEEPER_STATUS_INGEST_TOKEN`: 独自 status ingest を使う場合の token。Cloudflare dashboard
@@ -70,6 +84,7 @@ gh variable set CLAWSWEEPER_TARGET_REPO --repo asura-ai-dev/clawsweeper --body '
 gh variable set CLAWSWEEPER_TARGET_BRANCH --repo asura-ai-dev/clawsweeper --body 'main'
 gh variable set CLAWSWEEPER_ALLOWED_OWNER --repo asura-ai-dev/clawsweeper --body 'asura-ai-dev'
 gh variable set CLAWSWEEPER_STATE_REPOSITORY --repo asura-ai-dev/clawsweeper --body 'asura-ai-dev/clawsweeper-state'
+gh variable set CLAWSWEEPER_CODEX_LOGIN_METHOD --repo asura-ai-dev/clawsweeper --body 'chatgpt'
 ```
 
 コード上の後方互換 default は次のとおりです。
@@ -81,8 +96,14 @@ gh variable set CLAWSWEEPER_STATE_REPOSITORY --repo asura-ai-dev/clawsweeper --b
 | `CLAWSWEEPER_TARGET_BRANCH`               | `main`                        | `main`                           |
 | `CLAWSWEEPER_ALLOWED_OWNER`               | `openclaw`                    | `asura-ai-dev`                   |
 | `CLAWSWEEPER_STATE_REPOSITORY`            | `openclaw/clawsweeper-state`  | `asura-ai-dev/clawsweeper-state` |
+| `CLAWSWEEPER_CODEX_LOGIN_METHOD`          | `api`                         | `chatgpt`                         |
+| `CLAWSWEEPER_CODEX_SERVICE_TIER`          | `fast`                        | `fast` または `default`           |
 | `CLAWSWEEPER_STEERABLE_CODEX`             | `0`                           | `0`                              |
 | `CLAWSWEEPER_ENABLE_CLOUDFLARE_DASHBOARD` | OpenClaw owner だけ有効       | `0` または未設定                 |
+
+`CLAWSWEEPER_CODEX_SERVICE_TIER=default` は Codex の `service_tier` config 注入を省略する
+明示的な opt-out です。subscription 認証で `fast` が受理されないことを段階検証で確認した場合に
+だけ設定し、未設定・空値では後方互換の `fast` が使われます。
 
 初回は mutation gate をすべて閉じます。
 

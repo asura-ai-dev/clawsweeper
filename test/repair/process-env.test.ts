@@ -78,6 +78,7 @@ test("repair Codex config keeps repair workers on high fast", () => {
   assert.equal(repairCodexServiceTier(undefined), "fast");
   assert.equal(repairCodexServiceTier(""), "fast");
   assert.equal(repairCodexServiceTier("fast"), "fast");
+  assert.equal(repairCodexServiceTier(" default "), "");
 });
 
 function withEnv(values: Record<string, string>, callback: () => void) {
