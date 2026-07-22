@@ -170,6 +170,7 @@ jobs:
         with:
           client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
           private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
+          state-repository: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY }}
 
       - uses: ./.github/actions/setup-pnpm
         with:

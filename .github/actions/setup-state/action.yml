@@ -8,6 +8,10 @@ inputs:
     description: Generated state repository in owner/repository form.
     required: false
     default: openclaw/clawsweeper-state
+  state-repository:
+    description: Configured state repository in owner/repository form.
+    required: false
+    default: ""
   state-path:
     description: Checkout path for the generated state repository.
     required: false
@@ -41,7 +45,7 @@ runs:
   steps:
     - uses: actions/checkout@v7
       with:
-        repository: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY || inputs.repository }}
+        repository: ${{ inputs.state-repository || inputs.repository }}
         ref: state
         path: ${{ inputs.state-path }}
         token: ${{ inputs.token }}
@@ -55,7 +59,7 @@ runs:
       # Keep immutable ledger server merges dormant until state publishers can
       # fetch a merge-heavy shallow branch without hydrating its ancestry.
       env:
-        STATE_REPOSITORY: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY || inputs.repository }}
+        STATE_REPOSITORY: ${{ inputs.state-repository || inputs.repository }}
       run: |
         echo "CLAWSWEEPER_STATE_DIR=$GITHUB_WORKSPACE/${{ inputs.state-path }}" >> "$GITHUB_ENV"
         echo "CLAWSWEEPER_STATE_REPOSITORY=$STATE_REPOSITORY" >> "$GITHUB_ENV"

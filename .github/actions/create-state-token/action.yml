@@ -7,6 +7,10 @@ inputs:
   private-key:
     description: GitHub App private key.
     required: true
+  state-repository:
+    description: Generated state repository in owner/repository form.
+    required: false
+    default: ""
   owner:
     description: State repository owner.
     required: false
@@ -26,7 +30,7 @@ runs:
       id: state-repository
       shell: bash
       env:
-        CONFIGURED_STATE_REPOSITORY: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY }}
+        CONFIGURED_STATE_REPOSITORY: ${{ inputs.state-repository }}
         DEFAULT_STATE_OWNER: ${{ inputs.owner }}
         DEFAULT_STATE_REPOSITORY: ${{ inputs.repository }}
       run: |

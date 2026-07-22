@@ -103,10 +103,12 @@ jobs:
         with:
           client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
           private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
+          state-repository: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY }}
 
       - uses: ./.github/actions/setup-state
         with:
           token: ${{ steps.state-token.outputs.token }}
+          state-repository: ${{ vars.CLAWSWEEPER_STATE_REPOSITORY }}
           fetch-depth: 1
 
       - uses: actions/checkout@v7

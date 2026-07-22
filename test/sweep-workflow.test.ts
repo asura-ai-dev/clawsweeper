@@ -2477,12 +2477,9 @@ test("setup-state defaults to an auth-safe shallow checkout", () => {
   assert.doesNotMatch(fetchDepthBlock, /default: "0"/);
   assert.match(action, /fetch-depth: \$\{\{ inputs\.fetch-depth \}\}/);
   assert.match(action, /sparse-checkout: \$\{\{ inputs\.sparse-checkout \}\}/);
-  assert.doesNotMatch(action, /state-repository:/);
+  assert.match(action, /state-repository:/);
   assert.doesNotMatch(action, /state-ref:/);
-  assert.match(
-    action,
-    /repository: \$\{\{ vars\.CLAWSWEEPER_STATE_REPOSITORY \|\| inputs\.repository \}\}/,
-  );
+  assert.match(action, /repository: \$\{\{ inputs\.state-repository \|\| inputs\.repository \}\}/);
   assert.match(action, /ref: state/);
 });
 
