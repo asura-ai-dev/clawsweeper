@@ -3161,7 +3161,7 @@ jobs:
         id: apply-review-artifacts
         if: ${{ always() && !cancelled() && steps.sync-review-artifacts.outcome == 'success' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.target-write-token.outputs.token || github.token }}
           EXACT_ITEM: ${{ github.event.client_payload.item_number || github.event.inputs.item_number || github.event.inputs.item_numbers || '' }}
           EXPECTED_METRIC_COUNT: ${{ needs.plan.outputs.planned_shards }}
           HOT_INTAKE: ${{ needs.plan.outputs.hot_intake }}
