@@ -2234,6 +2234,15 @@ function relativeDataPath(value: string, label: string): string {
   return normalized;
 }
 
+export function isRelativeDataPath(value: string): boolean {
+  try {
+    relativeDataPath(value, "path");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function publicUrl(value: string, label: string): string {
   const normalized = requiredText(value, label);
   if (normalized.includes("?") || normalized.includes("#")) {

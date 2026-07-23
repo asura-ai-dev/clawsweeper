@@ -202,6 +202,7 @@ import {
   ACTION_EVENT_REASON_CODES,
   ACTION_EVENT_STATUSES,
   ACTION_EVENT_TYPES,
+  isRelativeDataPath,
   type ActionEvent,
   type ActionEventEvidence,
   type ActionEventReasonCode,
@@ -21982,7 +21983,7 @@ function actionLedgerFileEvidence(kind: string, filePath: string): ActionEventEv
   return {
     kind,
     sha256: sha256(readFileSync(filePath, "utf8")),
-    ...(recordPath.startsWith("../") ? {} : { reportPath: recordPath }),
+    ...(isRelativeDataPath(recordPath) ? { reportPath: recordPath } : {}),
   };
 }
 
@@ -21995,7 +21996,7 @@ function actionLedgerItemSubject(
     kind: item.kind,
     number: item.number,
     ...(options.sourceRevision ? { sourceRevision: options.sourceRevision } : {}),
-    ...(options.recordPath && !options.recordPath.startsWith("../")
+    ...(options.recordPath && isRelativeDataPath(options.recordPath)
       ? { recordPath: options.recordPath }
       : {}),
   };
@@ -24632,7 +24633,7 @@ function startFailedReviewRetryDispatchAttempt(options: {
       kind,
       number: options.number,
       sourceRevision: options.revision.value,
-      ...(recordPath.startsWith("../") ? {} : { recordPath }),
+      ...(isRelativeDataPath(recordPath) ? { recordPath } : {}),
     },
     evidence: [...workflowRunEvidence(), { kind: "retry_dispatch", runUrl: options.dispatchUrl }],
     attributes: {
@@ -25196,7 +25197,7 @@ function recordFailedReviewRetryEvents(options: {
             kind,
             number: result.number,
             ...(sourceRevision ? { sourceRevision } : {}),
-            ...(recordPath && !recordPath.startsWith("../") ? { recordPath } : {}),
+            ...(recordPath && isRelativeDataPath(recordPath) ? { recordPath } : {}),
           }
         : {
             repository: result.repo ?? targetRepo(),
@@ -25562,7 +25563,7 @@ function applyLedgerItemSubject(
     ...(state.businessIdentity.sourceRevision === "unknown"
       ? {}
       : { sourceRevision: state.businessIdentity.sourceRevision }),
-    ...(recordPath.startsWith("../") ? {} : { recordPath }),
+    ...(isRelativeDataPath(recordPath) ? { recordPath } : {}),
   };
 }
 
@@ -26320,9 +26321,9 @@ function recordApplyActionEvents(options: {
     subject: {
       repository: targetRepo(),
       kind: "publication",
-      ...(repoRelativePath(options.reportPath).startsWith("../")
-        ? {}
-        : { recordPath: repoRelativePath(options.reportPath) }),
+      ...(isRelativeDataPath(repoRelativePath(options.reportPath))
+        ? { recordPath: repoRelativePath(options.reportPath) }
+        : {}),
     },
     evidence: [...workflowRunEvidence(), ...(reportEvidence ? [reportEvidence] : [])],
     attributes: {
@@ -30226,14 +30227,14 @@ function applyArtifactsCommand(args: Args): void {
         kind,
         number: options.number,
         ...(sourceRevision ? { sourceRevision } : {}),
-        ...(recordPath.startsWith("../") ? {} : { recordPath }),
+        ...(isRelativeDataPath(recordPath) ? { recordPath } : {}),
       },
       evidence: [
         ...workflowRunEvidence(),
         {
           kind: "review_record",
           sha256: sha256(options.markdown),
-          ...(recordPath.startsWith("../") ? {} : { reportPath: recordPath }),
+          ...(isRelativeDataPath(recordPath) ? { reportPath: recordPath } : {}),
         },
       ],
       attributes: {
