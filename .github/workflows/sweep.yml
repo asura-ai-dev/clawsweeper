@@ -722,9 +722,11 @@ jobs:
 
       - name: Check out target repository
         if: ${{ steps.claim-exact-review-queue.outputs.claimed == 'true' && steps.live-item.outputs.proceed == 'true' }}
+        env:
+          GH_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
         run: |
           set -euo pipefail
-          url="https://github.com/${{ steps.target.outputs.target_repo }}.git"
+          url="https://x-access-token:${GH_TOKEN}@github.com/${{ steps.target.outputs.target_repo }}.git"
           cache_dir="${{ steps.target.outputs.target_checkout_dir }}-cache.git"
           checkout_dir="${{ steps.target.outputs.target_checkout_dir }}"
           target_branch="${{ steps.live-item.outputs.target_branch }}"
@@ -2766,9 +2768,11 @@ jobs:
             ${{ needs.plan.outputs.target_repo_name }}-git-${{ runner.os }}-
 
       - name: Check out target repository
+        env:
+          GH_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
         run: |
           set -euo pipefail
-          url="https://github.com/${{ needs.plan.outputs.target_repo }}.git"
+          url="https://x-access-token:${GH_TOKEN}@github.com/${{ needs.plan.outputs.target_repo }}.git"
           cache_dir="${{ needs.plan.outputs.target_checkout_dir }}-cache.git"
           checkout_dir="${{ needs.plan.outputs.target_checkout_dir }}"
           target_branch="${{ needs.plan.outputs.target_branch }}"
