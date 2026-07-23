@@ -38,11 +38,12 @@ on:
         required: false
         default: false
         type: boolean
-  schedule:
-    # gitcrawl-store refreshes openclaw/openclaw every 15 minutes. This intake
-    # runs daily and records the processed portable DB SHA so a
-    # delayed or duplicate tick does not enqueue work from the same store twice.
-    - cron: "8 8 * * *"
+  # schedule: disabled for the garuda fork during manual review-only verification.
+  # schedule:
+  #   # gitcrawl-store refreshes openclaw/openclaw every 15 minutes. This intake
+  #   # runs daily and records the processed portable DB SHA so a
+  #   # delayed or duplicate tick does not enqueue work from the same store twice.
+  #   - cron: "8 8 * * *"
 
 permissions:
   actions: write

@@ -45,8 +45,9 @@ on:
         required: true
         default: internal
         type: string
-  schedule:
-    - cron: "17 * * * *"
+  # schedule: disabled for the garuda fork during manual review-only verification.
+  # schedule:
+  #   - cron: "17 * * * *"
 
 permissions:
   contents: write

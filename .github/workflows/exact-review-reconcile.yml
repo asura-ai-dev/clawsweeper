@@ -4,8 +4,9 @@ on:
   workflow_run:
     workflows: [ClawSweeper]
     types: [completed]
-  schedule:
-    - cron: "*/15 * * * *"
+  # schedule: disabled for the garuda fork during manual review-only verification.
+  # schedule:
+  #   - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions: {}

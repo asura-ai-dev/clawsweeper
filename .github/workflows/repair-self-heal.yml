@@ -28,8 +28,9 @@ on:
         required: true
         default: blacksmith-16vcpu-ubuntu-2404
         type: string
-  schedule:
-    - cron: "17,47 * * * *"
+  # schedule: disabled for the garuda fork during manual review-only verification.
+  # schedule:
+  #   - cron: "17,47 * * * *"
 
 permissions:
   contents: write

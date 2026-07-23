@@ -1,8 +1,9 @@
 name: Compact state repository history
 
 on:
-  schedule:
-    - cron: "17 9 1 * *"
+  # schedule: disabled for the garuda fork during manual review-only verification.
+  # schedule:
+  #   - cron: "17 9 1 * *"
   workflow_dispatch:
 
 permissions:
