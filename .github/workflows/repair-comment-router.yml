@@ -137,6 +137,7 @@ jobs:
           owner: ${{ steps.target.outputs.target_repo_owner }}
           repositories: ${{ steps.target.outputs.target_repo_name }}
           permission-actions: write
+          permission-checks: read
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
