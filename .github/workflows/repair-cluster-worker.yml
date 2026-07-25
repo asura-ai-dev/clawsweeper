@@ -592,6 +592,19 @@ jobs:
           CLAWSWEEPER_ALLOWED_OWNER: ${{ steps.target.outputs.target_owner }}
         run: pnpm run repair:conflict-self-heal -- --verify-job-head "${{ inputs.job }}"
 
+      - name: Allow unprivileged user namespaces for validation containment
+        if: ${{ steps.check_job.outputs.job_exists == '1' && steps.self_heal_head.outputs.matched != 'false' && env.CLAWSWEEPER_ALLOW_EXECUTE == '1' && env.CLAWSWEEPER_ALLOW_FIX_PR == '1' }}
+        run: |
+          set -euo pipefail
+          # GitHub-hosted ubuntu-latest runners restrict unprivileged user
+          # namespaces via AppArmor by default (Ubuntu 23.10+); ClawSweeper's
+          # validation containment (unshare --user --net) needs them. This
+          # setting is scoped to the disposable runner VM for this job only.
+          sysctl_key="kernel.apparmor_restrict_unprivileged_userns"
+          if [ -f "/proc/sys/kernel/apparmor_restrict_unprivileged_userns" ]; then
+            sudo sysctl -w "${sysctl_key}=0"
+          fi
+
       - name: Verify Linux validation containment
         if: ${{ steps.check_job.outputs.job_exists == '1' && steps.self_heal_head.outputs.matched != 'false' && env.CLAWSWEEPER_ALLOW_EXECUTE == '1' && env.CLAWSWEEPER_ALLOW_FIX_PR == '1' }}
         run: pnpm run repair:containment-smoke
