@@ -134,6 +134,7 @@ test("local-review scrubs both GitHub and GitHub Enterprise token aliases", () =
     "GH_ENTERPRISE_TOKEN",
     "GITHUB_ENTERPRISE_TOKEN",
     "COMMIT_SWEEPER_TARGET_GH_TOKEN",
+    "CLAWSWEEPER_TARGET_GH_TOKEN",
     "CLAWSWEEPER_PROOF_INSPECTION_TOKEN",
   ]) {
     assert.ok(

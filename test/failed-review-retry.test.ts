@@ -126,6 +126,58 @@ function runFailedIssueRetry(
   ]);
 }
 
+test("failed review retry separates target reads from workflow dispatch auth", () => {
+  const root = mkdtempSync(tmpPrefix);
+  const fixture = failedIssueRetryFixture(root, 64318);
+  const dispatchPath = join(root, "dispatch.json");
+  const originalGhToken = process.env.GH_TOKEN;
+  const originalTargetToken = process.env.CLAWSWEEPER_TARGET_GH_TOKEN;
+  const ghMock = `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+const path = args.find((arg) => arg.startsWith("repos/")) || "";
+const targetRequest = path.includes("/issues/64318");
+const workflowRequest = path === "repos/openclaw/clawsweeper" || path.endsWith("/dispatches");
+if (targetRequest && process.env.GH_TOKEN !== "target-read-token") process.exit(91);
+if (workflowRequest && process.env.GH_TOKEN !== "workflow-dispatch-token") process.exit(92);
+if (/\\/issues\\/64318\\/comments(?:\\?|$)/.test(path)) {
+  console.log(JSON.stringify(args.includes("--slurp") ? [[]] : []));
+  process.exit(0);
+}
+if (path.endsWith("/issues/64318")) {
+  console.log(${JSON.stringify(JSON.stringify(fixture.issue))});
+  process.exit(0);
+}
+if (path === "repos/openclaw/clawsweeper") {
+  console.log("main");
+  process.exit(0);
+}
+if (path.endsWith("/dispatches") && args.includes("POST")) {
+  fs.writeFileSync(${JSON.stringify(dispatchPath)}, JSON.stringify(args));
+  process.exit(0);
+}
+process.exit(93);
+`;
+
+  try {
+    process.env.GH_TOKEN = "workflow-dispatch-token";
+    process.env.CLAWSWEEPER_TARGET_GH_TOKEN = "target-read-token";
+    withMockGh(root, ghMock, () => runFailedIssueRetry(fixture));
+
+    const report = JSON.parse(readFileSync(fixture.reportPath, "utf8")) as Array<{
+      action: string;
+    }>;
+    assert.equal(report[0]?.action, "dispatched_failed_review_retry");
+    assert.equal(existsSync(dispatchPath), true);
+  } finally {
+    if (originalGhToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = originalGhToken;
+    if (originalTargetToken === undefined) delete process.env.CLAWSWEEPER_TARGET_GH_TOKEN;
+    else process.env.CLAWSWEEPER_TARGET_GH_TOKEN = originalTargetToken;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("failed review retry aggregates large healthy scans without item receipts", () => {
   const actions = Array.from({ length: 6_500 }, () => "skipped_not_failed_review" as const);
   assert.equal(actions.filter(reviewRetryActionNeedsItemEventForTest).length, 0);

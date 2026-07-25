@@ -164,6 +164,34 @@ jobs:
 
       - uses: actions/checkout@v7
 
+      - name: Resolve placeholder target repository
+        id: target
+        run: |
+          set -euo pipefail
+          target_repo="$CLAWSWEEPER_TARGET_REPO"
+          if ! printf '%s' "$target_repo" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+            echo "Invalid placeholder target repository: $target_repo" >&2
+            exit 1
+          fi
+          {
+            echo "target_repo=$target_repo"
+            echo "target_repo_owner=${target_repo%%/*}"
+            echo "target_repo_name=${target_repo#*/}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create placeholder target read token
+        id: target-read-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
+          owner: ${{ steps.target.outputs.target_repo_owner }}
+          repositories: ${{ steps.target.outputs.target_repo_name }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+
       - name: Create state token
         id: state-token
         continue-on-error: true
@@ -180,7 +208,7 @@ jobs:
       - name: Recover orphaned review placeholders
         env:
           CLAWSWEEPER_WEBHOOK_SECRET: ${{ secrets.CLAWSWEEPER_WEBHOOK_SECRET }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
           QUEUE_URL: ${{ vars.CLAWSWEEPER_EXACT_REVIEW_QUEUE_URL || 'https://clawsweeper.openclaw.ai' }}
           REVIEW_PLACEHOLDER_MAX_CHECKS: ${{ vars.REVIEW_PLACEHOLDER_MAX_CHECKS || '20' }}
           REVIEW_PLACEHOLDER_MAX_RECOVERIES: ${{ vars.REVIEW_PLACEHOLDER_MAX_RECOVERIES || '5' }}

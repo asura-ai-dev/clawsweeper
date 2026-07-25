@@ -3037,6 +3037,23 @@ function ghJsonLines<T>(args: string[]): T[] {
   });
 }
 
+function withGitHubToken<T>(token: string, operation: () => T): T {
+  const previousGhToken = process.env.GH_TOKEN;
+  const previousGitHubToken = process.env.GITHUB_TOKEN;
+  const normalizedToken = token.trim();
+  if (normalizedToken) process.env.GH_TOKEN = normalizedToken;
+  else delete process.env.GH_TOKEN;
+  delete process.env.GITHUB_TOKEN;
+  try {
+    return operation();
+  } finally {
+    if (previousGhToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = previousGhToken;
+    if (previousGitHubToken === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = previousGitHubToken;
+  }
+}
+
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
@@ -24676,6 +24693,8 @@ function retryFailedReviewsCommandInner(args: Args): void {
   );
   const workflowRef = stringArg(args.workflow_ref, "main");
   const codexTimeoutMs = numberArg(args.codex_timeout_ms, DEFAULT_REVIEW_CODEX_TIMEOUT_MS);
+  const workflowGitHubToken = (process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "").trim();
+  const targetGitHubToken = (process.env.CLAWSWEEPER_TARGET_GH_TOKEN ?? workflowGitHubToken).trim();
   const requestedItemNumbers = itemNumbersArg(args.item_numbers, args.item_number);
   const requested = new Set(requestedItemNumbers);
   const now = Date.now();
@@ -24713,16 +24732,23 @@ function retryFailedReviewsCommandInner(args: Args): void {
         });
         continue;
       }
-      let item: Item;
-      let state: string;
-      let liveHeadSha: string | null = null;
-      let liveSourceRevision: string | null = null;
+      let liveItem: {
+        item: Item;
+        state: string;
+        liveHeadSha: string | null;
+        liveSourceRevision: string | null;
+      };
       try {
-        ({ item, state } = fetchItem(number));
-        if (state === "open" && !lockedConversationApplyReason(item)) {
-          if (item.kind === "pull_request") liveHeadSha = livePullHeadSha(number);
-          else liveSourceRevision = liveIssueSourceRevision(number);
-        }
+        liveItem = withGitHubToken(targetGitHubToken, () => {
+          const { item, state } = fetchItem(number);
+          let liveHeadSha: string | null = null;
+          let liveSourceRevision: string | null = null;
+          if (state === "open" && !lockedConversationApplyReason(item)) {
+            if (item.kind === "pull_request") liveHeadSha = livePullHeadSha(number);
+            else liveSourceRevision = liveIssueSourceRevision(number);
+          }
+          return { item, state, liveHeadSha, liveSourceRevision };
+        });
       } catch (error) {
         if (error instanceof GitHubRuntimeBudgetError) throw error;
         results.push({
@@ -24734,6 +24760,7 @@ function retryFailedReviewsCommandInner(args: Args): void {
         });
         continue;
       }
+      const { item, state, liveHeadSha, liveSourceRevision } = liveItem;
       const eligibility = failedReviewRetryEligibility({
         markdown,
         liveState: state,
@@ -24804,51 +24831,53 @@ function retryFailedReviewsCommandInner(args: Args): void {
       let dispatchCheckpointed = false;
       let checkpointDispatchUrl: string | undefined;
       try {
-        const dispatchUrl = dispatchFailedReviewRetry({
-          workflowRepo,
-          workflowRef,
-          targetRepo: targetRepo(),
-          number,
-          revision: retryRevision,
-          reason: retryReason,
-          attempts: eligibility.attempts ?? 0,
-          maxAttempts,
-          codexTimeoutMs,
-          onBeforeDispatch: (nextDispatchUrl) => {
-            checkpointDispatchUrl = nextDispatchUrl;
-            startFailedReviewRetryDispatchAttempt({
-              ledger: retryLedger,
-              number,
-              revision: retryRevision,
-              reportPath: path,
-              attempts: attemptsBeforeDispatch,
-              dispatchUrl: nextDispatchUrl,
-            });
-            markdown = checkpointFailedReviewRetry({
-              markdown,
-              status: "dispatching",
-              at: nowIso,
-              revision: retryRevision,
-              attempts: attemptsBeforeDispatch,
-              maxAttempts,
-              reason: retryReason,
-              dispatchUrl: nextDispatchUrl,
-            });
-            writeFileSync(path, markdown, "utf8");
-            writeFailedReviewRetryState(statePath, {
-              number,
-              status: "dispatching",
-              at: nowIso,
-              revision: retryRevision,
-              attempts: attemptsBeforeDispatch,
-              maxAttempts,
-              reason: retryReason,
-              dispatchUrl: nextDispatchUrl,
-            });
-            dispatchCheckpointed = true;
-            attempted += 1;
-          },
-        });
+        const dispatchUrl = withGitHubToken(workflowGitHubToken, () =>
+          dispatchFailedReviewRetry({
+            workflowRepo,
+            workflowRef,
+            targetRepo: targetRepo(),
+            number,
+            revision: retryRevision,
+            reason: retryReason,
+            attempts: eligibility.attempts ?? 0,
+            maxAttempts,
+            codexTimeoutMs,
+            onBeforeDispatch: (nextDispatchUrl) => {
+              checkpointDispatchUrl = nextDispatchUrl;
+              startFailedReviewRetryDispatchAttempt({
+                ledger: retryLedger,
+                number,
+                revision: retryRevision,
+                reportPath: path,
+                attempts: attemptsBeforeDispatch,
+                dispatchUrl: nextDispatchUrl,
+              });
+              markdown = checkpointFailedReviewRetry({
+                markdown,
+                status: "dispatching",
+                at: nowIso,
+                revision: retryRevision,
+                attempts: attemptsBeforeDispatch,
+                maxAttempts,
+                reason: retryReason,
+                dispatchUrl: nextDispatchUrl,
+              });
+              writeFileSync(path, markdown, "utf8");
+              writeFailedReviewRetryState(statePath, {
+                number,
+                status: "dispatching",
+                at: nowIso,
+                revision: retryRevision,
+                attempts: attemptsBeforeDispatch,
+                maxAttempts,
+                reason: retryReason,
+                dispatchUrl: nextDispatchUrl,
+              });
+              dispatchCheckpointed = true;
+              attempted += 1;
+            },
+          }),
+        );
         markdown = markFailedReviewRetry({
           markdown,
           status: "dispatched",

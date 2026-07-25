@@ -865,7 +865,9 @@ test("terminal exact-review runs reconcile through a signed isolated backstop", 
 
   assert.match(workflow, /name: Reconcile exact-review leases/);
   assert.match(workflow, /workflow_run:\s+workflows: \[ClawSweeper\]\s+types: \[completed\]/);
-  assert.match(workflow, /schedule:\s+- cron: "\*\/15 \* \* \* \*"/);
+  // schedule trigger is intentionally disabled for the garuda fork
+  // (see .github/workflows/*.yml comments); the cron entry stays commented.
+  assert.match(workflow, /#\s+- cron: "\*\/15 \* \* \* \*"/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /permissions: \{\}/);
   assert.match(
@@ -929,6 +931,23 @@ test("terminal exact-review runs reconcile through a signed isolated backstop", 
   );
   assert.match(sweepJob, /TARGET_REPO: \$\{\{ env\.CLAWSWEEPER_TARGET_REPO \}\}/);
   assert.match(sweepJob, /TARGET_BRANCH: \$\{\{ env\.CLAWSWEEPER_TARGET_BRANCH \}\}/);
+});
+
+test("placeholder recovery uses a read-only private target token", () => {
+  const workflow = readText(".github/workflows/exact-review-reconcile.yml");
+  const sweepJob = workflow.slice(workflow.indexOf("\n  sweep:"));
+
+  assert.match(
+    sweepJob,
+    /name: Create placeholder target read token[\s\S]*?permission-contents: read[\s\S]*?permission-issues: read[\s\S]*?permission-pull-requests: read/,
+  );
+  assert.match(
+    sweepJob,
+    /name: Recover orphaned review placeholders[\s\S]*?GH_TOKEN: \$\{\{ steps\.target-read-token\.outputs\.token \|\| github\.token \}\}/,
+  );
+  const tokenStart = sweepJob.indexOf("- name: Create placeholder target read token");
+  const tokenEnd = sweepJob.indexOf("\n      - ", tokenStart + 1);
+  assert.doesNotMatch(sweepJob.slice(tokenStart, tokenEnd), /permission-[a-z-]+: write/);
 });
 
 test("publish workflow dispatches immediate apply through the isolated lane", () => {
@@ -1088,6 +1107,22 @@ test("apply workflow isolates Codex proof from the credentialed mutation runner"
     proofJob,
     /permissions:\s+actions: read\s+contents: read\s+issues: read\s+pull-requests: read/,
   );
+  assert.match(
+    proofJob,
+    /name: Create proof target read token[\s\S]*?permission-actions: read[\s\S]*?permission-checks: read[\s\S]*?permission-contents: read[\s\S]*?permission-issues: read[\s\S]*?permission-pull-requests: read[\s\S]*?permission-statuses: read/,
+  );
+  assert.match(
+    proofJob,
+    /name: Reconcile read-only proof inputs[\s\S]*?GH_TOKEN: \$\{\{ steps\.target-read-token\.outputs\.token \|\| github\.token \}\}/,
+  );
+  assert.match(
+    proofJob,
+    /name: Generate bound close coverage proofs[\s\S]*?GH_TOKEN: \$\{\{ steps\.target-read-token\.outputs\.token \|\| github\.token \}\}[\s\S]*?CLAWSWEEPER_PROOF_INSPECTION_TOKEN: \$\{\{ steps\.target-read-token\.outputs\.token \|\| github\.token \}\}/,
+  );
+  const proofTargetTokenStart = proofJob.indexOf("- name: Create proof target read token");
+  const proofTargetTokenEnd = proofJob.indexOf("\n      - ", proofTargetTokenStart + 1);
+  const proofTargetToken = proofJob.slice(proofTargetTokenStart, proofTargetTokenEnd);
+  assert.doesNotMatch(proofTargetToken, /permission-[a-z-]+: write/);
   assert.match(proofJob, /persist-credentials: false/);
   assert.match(proofJob, /persist-credentials: "false"/);
   assert.doesNotMatch(proofJob, /Create target write token|Create state token/);
@@ -1360,7 +1395,7 @@ test("apply workflow bounds checkpoints and requeues with a fresh token", () => 
   const applyHelper = readText("scripts/apply-workflow-helpers.sh");
   const inputBlock = workflow.slice(
     workflow.indexOf("  workflow_dispatch:\n    inputs:"),
-    workflow.indexOf("\n  schedule:"),
+    workflow.indexOf("\npermissions:"),
   );
   const applyJob = workflow.slice(workflow.indexOf("\n  apply-existing:"));
   const applyStep = applyJob.slice(
@@ -2171,7 +2206,7 @@ test("sweep workflow_dispatch input count stays under GitHub limit", () => {
   const workflow = readText(".github/workflows/sweep.yml");
   const inputBlock = workflow.slice(
     workflow.indexOf("  workflow_dispatch:\n    inputs:"),
-    workflow.indexOf("\n  schedule:"),
+    workflow.indexOf("\npermissions:"),
   );
   const inputNames = [...inputBlock.matchAll(/^      [A-Za-z0-9_]+:/gm)];
 
@@ -2217,6 +2252,35 @@ test("failed review recovery waits for durable exact-review queue acknowledgemen
   assert.doesNotMatch(recoveryBlock, /workflow run sweep\.yml/);
   assert.doesNotMatch(recoveryBlock, /repos\/\$GITHUB_REPOSITORY\/dispatches/);
   assert.match(recoveryBlock, /for attempt in 1 2 3/);
+});
+
+test("private target maintenance lanes separate target reads from workflow dispatch auth", () => {
+  const workflow = readText(".github/workflows/sweep.yml");
+  const legacyStart = workflow.indexOf("\n  legacy-event-queue-intake:");
+  const legacyEnd = workflow.indexOf("\n\n  event-review-apply:", legacyStart);
+  const retryStart = workflow.indexOf("\n  retry-failed-reviews:");
+  const retryEnd = workflow.indexOf("\n\n  apply-proof:", retryStart);
+  const legacyJob = workflow.slice(legacyStart, legacyEnd);
+  const retryJob = workflow.slice(retryStart, retryEnd);
+
+  assert.match(legacyJob, /name: Create legacy target read token/);
+  assert.match(legacyJob, /permission-contents: read/);
+  assert.doesNotMatch(legacyJob, /permission-[a-z-]+: write/);
+  assert.match(
+    legacyJob,
+    /GH_TOKEN: \$\{\{ steps\.target-read-token\.outputs\.token \|\| github\.token \}\}/,
+  );
+
+  assert.match(retryJob, /name: Create failed-review retry target read token/);
+  assert.match(retryJob, /permission-contents: read/);
+  assert.match(retryJob, /permission-issues: read/);
+  assert.match(retryJob, /permission-pull-requests: read/);
+  assert.doesNotMatch(retryJob, /permission-[a-z-]+: write/);
+  assert.match(retryJob, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(
+    retryJob,
+    /CLAWSWEEPER_TARGET_GH_TOKEN: \$\{\{ steps\.retry-target-read-token\.outputs\.token \|\| github\.token \}\}/,
+  );
 });
 
 test("target sweep dispatches preserve disabled ClawHub guard", () => {

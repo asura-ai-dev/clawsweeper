@@ -245,10 +245,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Resolve legacy target repository
+        id: target
+        env:
+          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+        run: |
+          set -euo pipefail
+          target_repo="$(node -e 'const payload=JSON.parse(process.env.CLIENT_PAYLOAD || "{}"); process.stdout.write(String(payload.target_repo || "openclaw/openclaw").trim())')"
+          if ! printf '%s' "$target_repo" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+            echo "Invalid legacy target repository: $target_repo" >&2
+            exit 1
+          fi
+          {
+            echo "target_repo=$target_repo"
+            echo "target_repo_owner=${target_repo%%/*}"
+            echo "target_repo_name=${target_repo#*/}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create legacy target read token
+        id: target-read-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
+          owner: ${{ steps.target.outputs.target_repo_owner }}
+          repositories: ${{ steps.target.outputs.target_repo_name }}
+          permission-contents: read
+
       - name: Enqueue legacy event through the durable control plane
         env:
           CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
           QUEUE_URL: ${{ vars.CLAWSWEEPER_EXACT_REVIEW_QUEUE_URL || 'https://clawsweeper.openclaw.ai' }}
           CLAWSWEEPER_WEBHOOK_SECRET: ${{ secrets.CLAWSWEEPER_WEBHOOK_SECRET }}
         run: |
@@ -3813,11 +3841,40 @@ jobs:
         with:
           build-script: build:all
 
+      - name: Resolve failed-review retry target
+        id: retry-target
+        run: |
+          set -euo pipefail
+          target_repo="$CLAWSWEEPER_TARGET_REPO"
+          if ! printf '%s' "$target_repo" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+            echo "Invalid failed-review retry target repository: $target_repo" >&2
+            exit 1
+          fi
+          {
+            echo "target_repo=$target_repo"
+            echo "target_repo_owner=${target_repo%%/*}"
+            echo "target_repo_name=${target_repo#*/}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create failed-review retry target read token
+        id: retry-target-read-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
+          owner: ${{ steps.retry-target.outputs.target_repo_owner }}
+          repositories: ${{ steps.retry-target.outputs.target_repo_name }}
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+
       - name: Plan or dispatch failed-review retries
         id: retry-failed-reviews-run
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          CLAWSWEEPER_TARGET_GH_TOKEN: ${{ steps.retry-target-read-token.outputs.token || github.token }}
           TARGET_REPO: ${{ env.CLAWSWEEPER_TARGET_REPO }}
           DRY_RUN: ${{ vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_ENABLED == '1' && 'false' || 'true' }}
           RETRY_LIMIT: ${{ vars.CLAWSWEEPER_FAILED_REVIEW_RETRY_LIMIT || '3' }}
@@ -4104,6 +4161,7 @@ jobs:
       - name: Resolve proof target repository
         id: target
         run: |
+          set -euo pipefail
           target_repo="${{ github.event.inputs.target_repo || '' }}"
           if [ -z "$target_repo" ]; then
             case "${{ github.event.schedule || '' }}" in
@@ -4111,7 +4169,31 @@ jobs:
               *) target_repo="$CLAWSWEEPER_TARGET_REPO" ;;
             esac
           fi
-          echo "target_repo=$target_repo" >> "$GITHUB_OUTPUT"
+          if ! printf '%s' "$target_repo" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+            echo "Invalid proof target repository: $target_repo" >&2
+            exit 1
+          fi
+          {
+            echo "target_repo=$target_repo"
+            echo "target_repo_owner=${target_repo%%/*}"
+            echo "target_repo_name=${target_repo#*/}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create proof target read token
+        id: target-read-token
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ env.CLAWSWEEPER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CLAWSWEEPER_APP_PRIVATE_KEY }}
+          owner: ${{ steps.target.outputs.target_repo_owner }}
+          repositories: ${{ steps.target.outputs.target_repo_name }}
+          permission-actions: read
+          permission-checks: read
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+          permission-statuses: read
 
       - name: Resolve proof artifact identity
         id: proof-artifact
@@ -4131,7 +4213,7 @@ jobs:
 
       - name: Reconcile read-only proof inputs
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
           TARGET_REPO: ${{ steps.target.outputs.target_repo }}
         run: |
           set -euo pipefail
@@ -4221,8 +4303,8 @@ jobs:
         if: ${{ steps.proof-select.outputs.item_numbers != '' }}
         timeout-minutes: 50
         env:
-          GH_TOKEN: ${{ github.token }}
-          CLAWSWEEPER_PROOF_INSPECTION_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
+          CLAWSWEEPER_PROOF_INSPECTION_TOKEN: ${{ steps.target-read-token.outputs.token || github.token }}
           TARGET_REPO: ${{ steps.target.outputs.target_repo }}
         run: |
           set -euo pipefail
