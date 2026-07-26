@@ -8,6 +8,7 @@ const DEFAULT_COMMAND_MAX_BUFFER = 64 * 1024 * 1024;
 
 export type CommandRunOptions = {
   cwd?: string;
+  displayArgs?: readonly string[];
   env?: NodeJS.ProcessEnv;
   input?: string;
   isolateNetwork?: boolean;
@@ -48,7 +49,7 @@ export function runContainedCommand(
   const detail = [child.stderr, child.stdout].filter(Boolean).join("\n").trim();
   if (child.error) {
     if (child.error.code === "ETIMEDOUT") {
-      const rendered = [command, ...commandArgs].join(" ");
+      const rendered = [command, ...(options.displayArgs ?? commandArgs)].join(" ");
       const message = `command timed out after ${options.timeoutMs}ms: ${rendered}`;
       throw new Error(detail ? `${message}\n${detail}` : message);
     }
@@ -137,7 +138,7 @@ export function runCommandResult(
   const detail = commandResultDetail(child);
   if (child.error) {
     if ((child.error as NodeJS.ErrnoException).code === "ETIMEDOUT") {
-      const rendered = [command, ...commandArgs].join(" ");
+      const rendered = [command, ...(options.displayArgs ?? commandArgs)].join(" ");
       const message = `command timed out after ${options.timeoutMs}ms: ${rendered}`;
       throw new Error(detail ? `${message}\n${detail}` : message);
     }

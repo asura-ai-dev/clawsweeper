@@ -23,6 +23,7 @@ import {
   reproduceValidationFailureAtPinnedBase,
   requiredValidationCommands,
   runAllowedValidationCommands,
+  runTargetDiffCheck,
   selectWorkspacePackageManifests,
   switchTargetBranchWithPlumbing,
   workspacePackagePaths,
@@ -5235,6 +5236,129 @@ test("Git identity probes reject target fsmonitor callbacks without executing th
 });
 
 test(
+  "Git plumbing uses command-scoped GitHub auth without exposing tokens",
+  { skip: process.platform === "win32" },
+  () => {
+    const previousGhToken = process.env.GH_TOKEN;
+    const previousGitHubToken = process.env.GITHUB_TOKEN;
+    delete process.env.GH_TOKEN;
+    delete process.env.GITHUB_TOKEN;
+    try {
+      const cwd = gitPackageFixture({ check: 'node -e ""' });
+      fs.writeFileSync(path.join(cwd, "source.txt"), "initial\n");
+      git(cwd, "add", ".");
+      git(cwd, "commit", "-m", "initial");
+      const expected = captureTargetCheckoutBinding(cwd);
+      const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawsweeper-git-auth-"));
+      const logPath = path.join(binDir, "git.jsonl");
+      const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+      writeNodeCommandShim(
+        binDir,
+        "git",
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({
+  args,
+  ghTokenPresent: process.env.GH_TOKEN !== undefined,
+  githubTokenPresent: process.env.GITHUB_TOKEN !== undefined
+}) + "\\n");
+const input = fs.readFileSync(0);
+const result = spawnSync(${JSON.stringify(realGit)}, args, {
+  cwd: process.cwd(),
+  env: process.env,
+  input,
+  encoding: null
+});
+if (result.stdout) fs.writeSync(1, result.stdout);
+if (result.stderr) fs.writeSync(2, result.stderr);
+process.exit(result.status ?? 1);
+`,
+      );
+
+      withPathOnlyPrefix(binDir, () => runTargetDiffCheck(cwd, "HEAD", expected));
+      const publicInvocations = readJsonLines(logPath);
+      assert.ok(publicInvocations.length > 0);
+      assert.equal(
+        publicInvocations.some(({ args }) =>
+          args.some((arg) => arg.startsWith("http.https://github.com/.extraheader=")),
+        ),
+        false,
+      );
+
+      fs.writeFileSync(logPath, "");
+      const fallbackToken = "test-github-token-for-git-auth";
+      process.env.GITHUB_TOKEN = fallbackToken;
+      withPathOnlyPrefix(binDir, () => runTargetDiffCheck(cwd, "HEAD", expected));
+      const fallbackHeader = targetGitAuthHeader(fallbackToken);
+      const fallbackInvocations = readJsonLines(logPath);
+      assert.ok(fallbackInvocations.length > 0);
+      assert.ok(fallbackInvocations.every(({ args }) => args.includes(fallbackHeader)));
+
+      fs.writeFileSync(logPath, "");
+      const preferredToken = "test-gh-token-for-git-auth";
+      process.env.GH_TOKEN = preferredToken;
+      withPathOnlyPrefix(binDir, () => {
+        runTargetDiffCheck(cwd, "HEAD", expected);
+        commitTargetCheckoutWithPlumbing({
+          cwd,
+          messages: ["unchanged"],
+          identity: {
+            name: "clawsweeper",
+            email: "274271284+clawsweeper[bot]@users.noreply.github.com",
+          },
+        });
+      });
+      const preferredHeader = targetGitAuthHeader(preferredToken);
+      const authenticatedInvocations = readJsonLines(logPath);
+      const identityInvocations = authenticatedInvocations.filter(({ args }) =>
+        args.every((arg) => !arg.startsWith("core.hooksPath=")),
+      );
+      const isolatedInvocations = authenticatedInvocations.filter(({ args }) =>
+        args.some((arg) => arg.startsWith("core.hooksPath=")),
+      );
+      assert.ok(identityInvocations.length > 0);
+      assert.ok(isolatedInvocations.length > 0);
+      assert.ok(authenticatedInvocations.every(({ args }) => args.includes(preferredHeader)));
+      assert.ok(authenticatedInvocations.every(({ args }) => !args.includes(fallbackHeader)));
+      assert.ok(
+        authenticatedInvocations.every(
+          ({ ghTokenPresent, githubTokenPresent }) => !ghTokenPresent && !githubTokenPresent,
+        ),
+      );
+
+      const timeoutBinDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawsweeper-git-auth-timeout-"));
+      writeNodeCommandShim(
+        timeoutBinDir,
+        "git",
+        "#!/usr/bin/env node\nsetTimeout(() => {}, 1_000);\n",
+      );
+      assert.throws(
+        () => withPathOnlyPrefix(timeoutBinDir, () => captureTargetCheckoutBinding(cwd, 25)),
+        (error) => {
+          const message = String(error);
+          assert.match(message, /git <redacted-args>/);
+          assert.doesNotMatch(message, new RegExp(escapeRegExpForTest(preferredToken)));
+          assert.doesNotMatch(
+            message,
+            new RegExp(
+              escapeRegExpForTest(
+                Buffer.from(`x-access-token:${preferredToken}`).toString("base64"),
+              ),
+            ),
+          );
+          return true;
+        },
+      );
+    } finally {
+      restoreEnv("GH_TOKEN", previousGhToken);
+      restoreEnv("GITHUB_TOKEN", previousGitHubToken);
+    }
+  },
+);
+
+test(
   "validation accepts tracked node_modules workspace links back to the checkout",
   { skip: process.platform === "win32" },
   () => {
@@ -6490,6 +6614,19 @@ if (process.argv[2] === "--version") console.log("1.3.10");
 function restoreEnv(key, previous) {
   if (previous === undefined) delete process.env[key];
   else process.env[key] = previous;
+}
+
+function readJsonLines(filePath) {
+  return fs
+    .readFileSync(filePath, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function targetGitAuthHeader(token) {
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return `http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic}`;
 }
 
 function linuxValidationContainmentAvailable() {

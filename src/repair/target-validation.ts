@@ -3096,6 +3096,7 @@ function withIsolatedTargetGit<T>(
       deadlineAt,
       root: isolationRoot,
       run: (args, operation, options = {}) => {
+        const authArgs = targetValidationGitAuthArgs();
         const output = run(
           "git",
           [
@@ -3107,10 +3108,12 @@ function withIsolatedTargetGit<T>(
             "core.fsmonitor=false",
             "-c",
             "diff.external=",
+            ...authArgs,
             ...args,
           ],
           {
             cwd,
+            ...(authArgs.length > 0 ? { displayArgs: ["<redacted-args>"] } : {}),
             env: { ...baseEnv, ...options.env },
             ...(options.input === undefined ? {} : { input: options.input }),
             timeoutMs: validationIdentityTimeoutMs(
@@ -3228,12 +3231,21 @@ function runIdentityGit(
   env.GIT_CONFIG_NOSYSTEM = "1";
   env.GIT_NO_REPLACE_OBJECTS = "1";
   env.GIT_OPTIONAL_LOCKS = "0";
-  return run("git", ["-c", "core.fsmonitor=false", "-c", "diff.external=", ...args], {
+  const authArgs = targetValidationGitAuthArgs();
+  return run("git", ["-c", "core.fsmonitor=false", "-c", "diff.external=", ...authArgs, ...args], {
     cwd,
+    ...(authArgs.length > 0 ? { displayArgs: ["<redacted-args>"] } : {}),
     env,
     ...(options.maxBuffer === undefined ? {} : { maxBuffer: options.maxBuffer }),
     timeoutMs: validationIdentityTimeoutMs(deadlineAt, operation),
   });
+}
+
+function targetValidationGitAuthArgs(): string[] {
+  const token = (process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "").trim();
+  if (!token) return [];
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return ["-c", `http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic}`];
 }
 
 function parseBoundedGitPathList(
